@@ -7,7 +7,7 @@ import dminer.core.chunk;
 version (Android) {
     const int MAX_VIEW_DISTANCE = 60;
 } else {
-    const int MAX_VIEW_DISTANCE = 90;
+    const int MAX_VIEW_DISTANCE = 120;
 }
 
 
@@ -217,10 +217,6 @@ private:
 
     Position _camPosition;
     int maxVisibleRange = MAX_VIEW_DISTANCE;
-}
-
-interface ChunkVisitor {
-    void visit(World world, SmallChunk * chunk);
 }
 
 struct VisitorCell {

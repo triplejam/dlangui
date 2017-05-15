@@ -43,6 +43,10 @@ extern (C) int UIAppMain(string[] args) {
     embeddedResourceList.addResources(embedResourcesFromList!("resources.list")());
     //embeddedResourceList.dumpEmbeddedResources();
 
+    debug { 
+        testPlanes();
+    }
+
     // create window
     Window window = Platform.instance.createWindow("DlangUI Voxel RPG", null, WindowFlag.Resizable, 600, 500);
     window.mainWidget = new UiWidget();
@@ -56,11 +60,19 @@ extern (C) int UIAppMain(string[] args) {
     return Platform.instance.enterMessageLoop();
 }
 
+class ChunkVisitCounter : ChunkVisitor {
+    int count;
+    void visit(World world, SmallChunk * chunk) {
+        count++;
+    }
+}
+
 class MinerDrawable : MaterialDrawableObject, ChunkVisitor {
 
     import dlangui.graphics.scene.node;
     private World _world;
     private ChunkDiamondVisitor _chunkVisitor;
+    private VisibilityCheckIterator _chunkIterator;
     private Vector3d _pos;
     private Node3d _node;
     private Camera _cam;
@@ -78,16 +90,26 @@ class MinerDrawable : MaterialDrawableObject, ChunkVisitor {
         /// override it
         _node = node;
         //Log.d("drawing Miner scene");
-        _chunkVisitor.init(_world, MAX_VIEW_DISTANCE, this);
+        //_chunkVisitor.init(_world, MAX_VIEW_DISTANCE, this);
         _pos = _world.camPosition.pos;
         _camPosition = _cam.translation;
         _camForwardVector = _cam.forwardVectorWorld;
         _camPosition -= _camForwardVector * 8;
         _skippedCount = _drawnCount = 0;
         long ts = currentTimeMillis();
-        _chunkVisitor.visitChunks(_pos);
+        //_chunkVisitor.visitChunks(_pos);
+        Vector3d camVector;
+        camVector.x = cast(int)(_camForwardVector.x * 256);
+        camVector.y = cast(int)(_camForwardVector.y * 256);
+        camVector.z = cast(int)(_camForwardVector.z * 256);
+        ChunkVisitCounter countVisitor = new ChunkVisitCounter();
+        _chunkIterator.start(_world, _world.camPosition.pos, MAX_VIEW_DISTANCE);
+        _chunkIterator.visitVisibleChunks(countVisitor, camVector);
+        long durationNoDraw = currentTimeMillis() - ts;
+        _chunkIterator.start(_world, _world.camPosition.pos, MAX_VIEW_DISTANCE);
+        _chunkIterator.visitVisibleChunks(this, camVector);
         long duration = currentTimeMillis() - ts;
-        Log.d("drawing of Miner scene finished in ", duration, " ms  skipped:", _skippedCount, " drawn:", _drawnCount);
+        Log.d("drawing of Miner scene finished in ", duration, " ms  skipped:", _skippedCount, " drawn:", _drawnCount, " duration(noDraw)=", durationNoDraw);
     }
     void visit(World world, SmallChunk * chunk) {
         if (chunk) {
@@ -95,7 +117,7 @@ class MinerDrawable : MaterialDrawableObject, ChunkVisitor {
             vec3 chunkPos = vec3(p.x + 4, p.y + 4, p.z + 4);
             vec3 chunkDirection = (chunkPos - _camPosition).normalized;
             float dot = _camForwardVector.dot(chunkDirection);
-            //Log.d("chunkPos ", chunkPos, " chunkDir ", chunkDirection, " camDir ");
+            //Log.d("visit() chunkPos ", chunkPos, " chunkDir ", chunkDirection, " camDir ");
             if (dot < 0.7) { // cos(45)
                 _skippedCount++;
                 return;
@@ -430,6 +452,7 @@ class UiWidget : VerticalLayout { //, CellVisitor
     }
 
     void updatePositionMessage() {
+        import std.string : format;
         Widget w = childById("lblPosition");
         string dir = _world.camPosition.direction.dir.to!string;
         dstring s = format("pos(%d,%d) h=%d fps:%d %s    [F]lying: %s   [U]pdateMesh: %s", _world.camPosition.pos.x, _world.camPosition.pos.z, _world.camPosition.pos.y, 
