@@ -256,9 +256,21 @@ class FileDialog : Dialog, CustomGridCellAdapter {
     protected bool openDirectory(string dir, string selectedItemPath) {
         dir = buildNormalizedPath(dir);
         Log.d("FileDialog.openDirectory(", dir, ")");
-        _fileList.rows = 0;
-        if (!listDirectory(dir, true, true, _showHiddenFiles, selectedFilter, _entries, executableFilterSelected))
+        DirEntry[] entries;
+
+        auto attrFilter = (showHiddenFiles ? AttrFilter.all : AttrFilter.allVisible) | AttrFilter.special | AttrFilter.parent;
+        if (executableFilterSelected()) {
+            attrFilter |= AttrFilter.executable;
+        }
+        try {
+            _entries = listDirectory(dir, attrFilter, selectedFilter());
+        } catch(Exception e) {
+            import dlangui.dialogs.msgbox;
+            auto msgBox = new MessageBox(UIString.fromRaw("Error"d), UIString.fromRaw(e.msg.toUTF32), window());
+            msgBox.show();
             return false;
+        }
+        _fileList.rows = 0;
         _path = dir;
         _isRoot = isRoot(dir);
         _edPath.path = _path; //toUTF32(_path);
@@ -312,7 +324,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
     void autofitGrid() {
         _fileList.autoFitColumnWidths();
-        _fileList.setColWidth(1, 0);
+        //_fileList.setColWidth(1, 0);
         _fileList.fillColumnWidth(1);
     }
 
@@ -351,6 +363,8 @@ class FileDialog : Dialog, CustomGridCellAdapter {
                 sz.y = fnt.height;
             return sz;
         }
+        if (BACKEND_CONSOLE)
+            return Point(0, 0);
         DrawableRef icon = rowIcon(row);
         if (icon.isNull)
             return Point(0, 0);
@@ -441,7 +455,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             mkdirRecurse(newdir);
             openDirectory(newdir, null);
         } catch (Exception e) {
-            window.showMessageBox(UIString("CREATE_FOLDER_ERROR_TITLE"c), UIString("CREATE_FOLDER_ERROR_MESSAGE"c));
+            window.showMessageBox(UIString.fromId("CREATE_FOLDER_ERROR_TITLE"c), UIString.fromId("CREATE_FOLDER_ERROR_MESSAGE"c));
         }
     }
 
@@ -457,7 +471,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         }
         if (action.id == StandardAction.CreateDirectory) {
             // show editor popup
-            window.showInputBox(UIString("CREATE_NEW_FOLDER"c), UIString("INPUT_NAME_FOR_FOLDER"c), ""d, delegate(dstring s) {
+            window.showInputBox(UIString.fromId("CREATE_NEW_FOLDER"c), UIString.fromId("INPUT_NAME_FOR_FOLDER"c), ""d, delegate(dstring s) {
                 if (!s.empty)
                     createAndEnterDirectory(toUTF8(s));
             });
@@ -689,8 +703,12 @@ class FilePathPanelItem : HorizontalLayout {
         // show popup menu with subdirs
         string[] filters;
         DirEntry[] entries;
-        if (!listDirectory(_path, true, false, false, filters, entries))
+        try {
+            AttrFilter attrFilter = AttrFilter.dirs | AttrFilter.parent;
+            entries = listDirectory(_path, attrFilter);
+        } catch(Exception e) {
             return false;
+        }
         if (entries.length == 0)
             return false;
         MenuItem dirs = new MenuItem();
@@ -699,10 +717,11 @@ class FilePathPanelItem : HorizontalLayout {
             string fullPath = e.name;
             string d = baseName(fullPath);
             Action a = new Action(itemId++, toUTF32(d));
+            a.stringParam = fullPath;
             MenuItem item = new MenuItem(a);
-            item.menuItemClick = delegate(MenuItem item) { 
+            item.menuItemAction = delegate(const Action action) {
                 if (onPathSelectionListener.assigned)
-                    return onPathSelectionListener(fullPath);
+                    return onPathSelectionListener(action.stringParam);
                 return false;
             };
             dirs.add(item);
@@ -920,7 +939,7 @@ class FileNameEditLine : HorizontalLayout {
         _btn.styleId = STYLE_BUTTON_NOMARGINS;
         _btn.layoutWeight = 0;
         _btn.click = delegate(Widget src) {
-            FileDialog dlg = new FileDialog(UIString(_caption), window, null, _fileDialogFlags);
+            FileDialog dlg = new FileDialog(UIString.fromRaw(_caption), window, null, _fileDialogFlags);
             foreach(key, value; _filetypeIcons)
                 dlg.filetypeIcons[key] = value;
             dlg.filters = _filters;

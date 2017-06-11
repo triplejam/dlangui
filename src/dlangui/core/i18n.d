@@ -26,6 +26,14 @@ from DLangUI framework with resources of application.
 Set interface language using Platform.instance.uiLanguage in UIAppMain during initialization of application settings:
 ---
 Platform.instance.uiLanguage = "en";
+
+/// create by id - string STR_MENU_HELP="Help" must be added to translation resources
+UIString help1 = UIString.fromId("STR_MENU_HELP");
+/// create by id and fallback string
+UIString help2 = UIString.fromId("STR_MENU_HELP", "Help"d);
+/// create from raw string
+UIString help3 = UIString.fromRaw("Help"d);
+
 ---
 
 
@@ -82,11 +90,14 @@ struct UIString {
     /** id to find value in translator */
     private string _id;
 
+    deprecated("use UIString.fromId() instead")
     /** create string with i18n resource id */
     this(string id) {
         _id = id;
     }
-    /** create string with raw value */
+
+    /** create string with raw value; deprecated, use fromRaw() instead */
+    deprecated("use UIString.fromRaw() instead")
     this(dstring value) {
         _value = value;
     }
@@ -130,6 +141,21 @@ struct UIString {
     /// returns true if string is empty: neither resource nor string is assigned
     bool empty() const {
         return _value.length == 0 && _id.length == 0;
+    }
+
+    /// create UIString from id - will be translated; fallback value can be provided for cases if translation is not found
+    static UIString fromId(string ID, dstring fallback = null) {
+        return UIString(ID, fallback);
+    }
+
+    /// Create UIString from raw utf32 string value - will not be translated
+    static UIString fromRaw(dstring rawValue) {
+        return UIString(null, rawValue);
+    }
+
+    /// Create UIString from raw utf8 string value - will not be translated
+    static UIString fromRaw(string rawValue) {
+        return UIString(null, toUTF32(rawValue));
     }
 
     /** Default conversion to dstring */
@@ -313,26 +339,26 @@ struct StringListValue {
 
     this(string id, dstring name, string iconId = null) {
         this.stringId = id;
-        this.label = name;
+        this.label.value = name;
         this.iconId = iconId;
     }
     this(string id, string nameResourceId, string iconId = null) {
         this.stringId = id;
-        this.label = nameResourceId;
+        this.label.id = nameResourceId;
         this.iconId = iconId;
     }
     this(int id, dstring name, string iconId = null) {
         this.intId = id;
-        this.label = name;
+        this.label.value = name;
         this.iconId = iconId;
     }
     this(int id, string nameResourceId, string iconId = null) {
         this.intId = id;
-        this.label = nameResourceId;
+        this.label.id = nameResourceId;
         this.iconId = iconId;
     }
     this(dstring name, string iconId = null) {
-        this.label = name;
+        this.label.value = name;
         this.iconId = iconId;
     }
 }

@@ -1234,7 +1234,7 @@ class Window : CustomEventTarget {
 
     /// Show message box with specified title and message (title and message as dstring)
     void showMessageBox(dstring title, dstring message, const (Action)[] actions = [ACTION_OK], int defaultActionIndex = 0, bool delegate(const Action result) handler = null) {
-        showMessageBox(UIString(title), UIString(message), actions, defaultActionIndex, handler);
+        showMessageBox(UIString.fromRaw(title), UIString.fromRaw(message), actions, defaultActionIndex, handler);
     }
 
     static if (BACKEND_GUI) {
@@ -1246,7 +1246,7 @@ class Window : CustomEventTarget {
     }
 
     void showInputBox(dstring title, dstring message, dstring initialText, void delegate(dstring result) handler) {
-        showInputBox(UIString(title), UIString(message), initialText, handler);
+        showInputBox(UIString.fromRaw(title), UIString.fromRaw(message), initialText, handler);
     }
 
     protected TimerQueue _timerQueue;
@@ -1557,8 +1557,8 @@ class Platform {
 
     /// show directory or file in OS file manager (explorer, finder, etc...)
     bool showInFileManager(string pathName) {
-        Log.w("showInFileManager is not implemented for current platform");
-        return false;
+        static import dlangui.core.filemanager;
+        return dlangui.core.filemanager.showInFileManager(pathName);
     }
 
     /// handle theme change: e.g. reload some themed resources

@@ -358,6 +358,9 @@ extern (C) int UIAppMain(string[] args) {
 
         MenuItem windowItem = new MenuItem(new Action(3, "MENU_WINDOW"c));
         windowItem.add(new Action(30, "MENU_WINDOW_PREFERENCES"));
+        windowItem.add(new Action(31, UIString.fromId("MENU_WINDOW_MINIMIZE")));
+        windowItem.add(new Action(32, UIString.fromId("MENU_WINDOW_MAXIMIZE")));
+        windowItem.add(new Action(33, UIString.fromId("MENU_WINDOW_RESTORE")));
         MenuItem helpItem = new MenuItem(new Action(4, "MENU_HELP"c));
         helpItem.add(new Action(40, "MENU_HELP_VIEW_HELP"));
         MenuItem aboutItem = new MenuItem(new Action(41, "MENU_HELP_ABOUT"));
@@ -377,8 +380,17 @@ extern (C) int UIAppMain(string[] args) {
             if (a.id == ACTION_FILE_EXIT) {
                 window.close();
                 return true;
+            } else if (a.id == 31) {
+                window.minimizeWindow();
+                return true;
+            } else if (a.id == 32) {
+                window.maximizeWindow();
+                return true;
+            } else if (a.id == 33) {
+                window.restoreWindow();
+                return true;
             } else if (a.id == 41) {
-                window.showMessageBox(UIString("About"d), UIString("DLangUI demo app\n(C) Vadim Lopatin, 2014\nhttp://github.com/buggins/dlangui"d));
+                window.showMessageBox(UIString.fromRaw("About"d), UIString.fromRaw("DLangUI demo app\n(C) Vadim Lopatin, 2014\nhttp://github.com/buggins/dlangui"d));
                 return true;
             } else if (a.id == ACTION_FILE_OPEN) {
                 UIString caption;
@@ -409,12 +421,12 @@ extern (C) int UIAppMain(string[] args) {
                                             tabs.selectTab(filename);
                                         } else {
                                             destroy(editor);
-                                            window.showMessageBox(UIString("File open error"d), UIString("Cannot open file "d ~ toUTF32(filename)));
+                                            window.showMessageBox(UIString.fromRaw("File open error"d), UIString.fromRaw("Cannot open file "d ~ toUTF32(filename)));
                                         }
                                     }
                                 } else {
                                     Log.d("FileDialog.onDialogResult: ", result, " param=", result.stringParam);
-                                    window.showMessageBox(UIString("FileOpen result"d), UIString("Filename: "d ~ toUTF32(filename)));
+                                    window.showMessageBox(UIString.fromRaw("FileOpen result"d), UIString.fromRaw("Filename: "d ~ toUTF32(filename)));
                                 }
                         }
                     }
@@ -1217,12 +1229,12 @@ static if (ENABLE_OPENGL) {
 
         /// this is OpenGLDrawableDelegate implementation
         private void doDraw(Rect windowRect, Rect rc) {
-            Log.v("GlGears: MyOpenglWidget.doDraw() draw gears");
             if (!openglEnabled) {
                 Log.v("GlGears: OpenGL is disabled");
                 return;
             }
-            _oldApi = !!glLightfv;
+            import dlangui.graphics.glsupport : glSupport;
+            _oldApi = glSupport.legacyMode;
             if (_oldApi) {
                 drawUsingOldAPI(rc);
             } else {
@@ -1238,9 +1250,7 @@ static if (ENABLE_OPENGL) {
                 _initCalled = true;
                 glxgears_init();
             }
-            Log.v("GlGears: calling reshape()");
             glxgears_reshape(rc);
-            Log.v("GlGears: calling draw()");
             glEnable(GL_LIGHTING);
             glEnable(GL_LIGHT0);
             glEnable(GL_DEPTH_TEST);
@@ -1469,14 +1479,12 @@ static if (ENABLE_OPENGL) {
         static GLfloat[4] green = [ 0.0, 0.8, 0.2, 1.0 ];
         static GLfloat[4] blue = [ 0.2, 0.2, 1.0, 1.0 ];
         
-        Log.d("GlGears: init - calling glLightfv");
         glLightfv(GL_LIGHT0, GL_POSITION, pos.ptr);
         glEnable(GL_CULL_FACE);
         glEnable(GL_LIGHTING);
         glEnable(GL_LIGHT0);
         glEnable(GL_DEPTH_TEST);
         
-        Log.d("GlGears: init - calling genlists");
         /* make the gears */
         gear1 = glGenLists(1);
         glNewList(gear1, GL_COMPILE);

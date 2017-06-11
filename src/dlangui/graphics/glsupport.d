@@ -38,7 +38,7 @@ version (Android) {
     public import EGL.egl;
     //public import GLES2.gl2;
     public import GLES3.gl3;
-    
+
     static if (SUPPORT_LEGACY_OPENGL) {
         public import GLES.gl : glEnableClientState, glLightfv, glColor4f, GL_ALPHA_TEST, GL_VERTEX_ARRAY, 
 		    GL_COLOR_ARRAY, glVertexPointer, glColorPointer, glDisableClientState, 
@@ -268,7 +268,7 @@ class GLProgram : dlangui.graphics.scene.mesh.GraphicsEffect {
 
     /// override to init shader code locations
     abstract bool initLocations();
-    
+
     ~this() {
         // TODO: cleanup
         if (program)
@@ -281,15 +281,9 @@ class GLProgram : dlangui.graphics.scene.mesh.GraphicsEffect {
         initialized = false;
     }
 
-    /// returns true if program is ready for use (compiles program if not yet compiled)
-    bool check()
-    {
-        if (error)
-            return false;
-        if (!initialized)
-            if (!compile())
-                return false;
-        return true;
+    /// returns true if program is ready for use
+    bool check() {
+        return !error && initialized;
     }
 
     static GLuint currentProgram;
@@ -499,89 +493,37 @@ class SolidFillProgram : GLProgram {
     }
 
     VAO vao;
-    VBO vbo;
-    EBO ebo;
 
-    protected void createVAO(float[] vertices, float[] colors) {
-        if (!vao) {
-            vao = new VAO;
-            vbo = new VBO;
-            ebo = new EBO;
-        }
-        vbo.bind();
-        ebo.bind();
-        vao.bind();
+    protected void beforeExecute() {
+        bind();
+        setUniform(DefaultUniform.u_worldViewProjectionMatrix, glSupport.projectionMatrix);
+    }
+
+    protected void createVAO(size_t verticesBufferLength) {
+        vao = new VAO;
 
         glVertexAttribPointer(vertexLocation, 3, GL_FLOAT, GL_FALSE, 0, cast(void*) 0);
-        glVertexAttribPointer(colAttrLocation, 4, GL_FLOAT, GL_FALSE, 0, cast(void*) (vertices.length * float.sizeof));
+        glVertexAttribPointer(colAttrLocation, 4, GL_FLOAT, GL_FALSE, 0, cast(void*) (verticesBufferLength * float.sizeof));
 
         glEnableVertexAttribArray(vertexLocation);
         glEnableVertexAttribArray(colAttrLocation);
     }
 
-    protected void beforeExecute() {
-        glEnable(GL_BLEND);
-        checkgl!glDisable(GL_CULL_FACE);
-        checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        bind();
-        setUniform(DefaultUniform.u_worldViewProjectionMatrix, glSupport.projectionMatrix);
-        //checkgl!glUniformMatrix4fv(matrixLocation, 1, false, glSupport.projectionMatrix.m.ptr);
-    }
-
-    bool execute(float[] vertices, float[] colors, int[] indexes) {
+    bool drawBatch(int length, int start, bool areLines = false) {
         if(!check())
             return false;
         beforeExecute();
 
-        createVAO(vertices, colors);
-
-        vbo.bind();
-        vbo.fill([vertices, colors]);
-
-        ebo.bind();
-        ebo.fill(indexes);
-
         vao.bind();
-        checkgl!glDrawElements(GL_TRIANGLES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)null);
 
-        vao.unbind();
-        vbo.unbind();
-        ebo.unbind();
+        checkgl!glDrawElements(areLines ? GL_LINES : GL_TRIANGLES, cast(int)length, GL_UNSIGNED_INT, cast(void*)(start * 4));
 
         return true;
     }
 
     void destroyBuffers() {
         destroy(vao);
-        destroy(vbo);
-        destroy(ebo);
         vao = null;
-        vbo = null;
-        ebo = null;
-    }
-}
-
-class LineProgram : SolidFillProgram {
-    override bool execute(float[] vertices, float[] colors, int[] indexes) {
-        if(!check())
-            return false;
-        beforeExecute();
-
-        createVAO(vertices, colors);
-
-        vbo.bind();
-        vbo.fill([vertices, colors]);
-
-        ebo.bind();
-        ebo.fill(indexes);
-
-        vao.bind();
-        checkgl!glDrawElements(GL_LINES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)null);
-
-        vao.unbind();
-        vbo.unbind();
-        ebo.unbind();
-        return true;
     }
 }
 
@@ -624,33 +566,26 @@ class TextureProgram : SolidFillProgram {
     /// get location for vertex attribute
     override int getVertexElementLocation(VertexElementType type) {
         switch(type) with(VertexElementType) {
-            case TEXCOORD0: 
+            case TEXCOORD0:
                 return texCoordLocation;
             default:
                 return super.getVertexElementLocation(type);
         }
     }
 
-    protected void createVAO(float[] vertices, float[] colors, float[] texcoords) {
-        if (!vao) {
-            vao = new VAO;
-            vbo = new VBO;
-            ebo = new EBO;
-        }
-        vbo.bind();
-        ebo.bind();
-        vao.bind();
+    protected void createVAO(size_t verticesBufferLength, size_t colorsBufferLength) {
+        vao = new VAO;
 
         glVertexAttribPointer(vertexLocation, 3, GL_FLOAT, GL_FALSE, 0, cast(void*) 0);
-        glVertexAttribPointer(colAttrLocation, 4, GL_FLOAT, GL_FALSE, 0, cast(void*) (vertices.length * float.sizeof));
-        glVertexAttribPointer(texCoordLocation, 2, GL_FLOAT, GL_FALSE, 0, cast(void*) ((vertices.length + colors.length) * float.sizeof));
+        glVertexAttribPointer(colAttrLocation, 4, GL_FLOAT, GL_FALSE, 0, cast(void*) (verticesBufferLength * float.sizeof));
+        glVertexAttribPointer(texCoordLocation, 2, GL_FLOAT, GL_FALSE, 0, cast(void*) ((verticesBufferLength + colorsBufferLength) * float.sizeof));
 
         glEnableVertexAttribArray(vertexLocation);
         glEnableVertexAttribArray(colAttrLocation);
         glEnableVertexAttribArray(texCoordLocation);
     }
 
-    bool execute(float[] vertices, float[] colors, float[] texcoords, Tex2D texture, bool linear, int[] indexes) {
+    bool drawBatch(Tex2D texture, bool linear, int length, int start) {
         if(!check())
             return false;
         beforeExecute();
@@ -658,21 +593,9 @@ class TextureProgram : SolidFillProgram {
         texture.setup();
         texture.setSamplerParams(linear);
 
-        createVAO(vertices, colors, texcoords);
-
-        vbo.bind();
-        vbo.fill([vertices, colors, texcoords]);
-
-        ebo.bind();
-        ebo.fill(indexes);
-
         vao.bind();
 
-        checkgl!glDrawElements(GL_TRIANGLES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)null);
-
-        vao.unbind();
-        vbo.unbind();
-        ebo.unbind();
+        checkgl!glDrawElements(GL_TRIANGLES, cast(int)length, GL_UNSIGNED_INT, cast(void*)(start * 4));
 
         texture.unbind();
         return true;
@@ -699,7 +622,24 @@ private void FillColor(uint color, Color[] buf_slice) {
     }
 }
 
-__gshared GLSupport _glSupport;
+private float[] convertColors(uint[] cols) pure nothrow {
+    float[] colors;
+    colors.length = cols.length * 4;
+    foreach(i; 0 .. cols.length) {
+        uint color = cols[i];
+        float r = ((color >> 16) & 255) / 255.0;
+        float g = ((color >> 8) & 255) / 255.0;
+        float b = ((color >> 0) & 255) / 255.0;
+        float a = (((color >> 24) & 255) ^ 255) / 255.0;
+        colors[i * 4 + 0] = r;
+        colors[i * 4 + 1] = g;
+        colors[i * 4 + 2] = b;
+        colors[i * 4 + 3] = a;
+    }
+    return colors;
+}
+
+private __gshared GLSupport _glSupport;
 @property GLSupport glSupport() {
     if (!_glSupport) {
         Log.f("GLSupport is not initialized");
@@ -711,7 +651,9 @@ __gshared GLSupport _glSupport;
     return _glSupport;
 }
 
-/// initialize OpenGL suport helper (call when current OpenGL context is initialized)
+__gshared bool glNoContext;
+
+/// initialize OpenGL support helper (call when current OpenGL context is initialized)
 bool initGLSupport(bool legacy = false) {
     import dlangui.platforms.common.platform : setOpenglEnabled;
     if (_glSupport && _glSupport.valid)
@@ -754,13 +696,10 @@ bool initGLSupport(bool legacy = false) {
     }
     if (!_glSupport) {
         Log.d("glSupport not initialized: trying to create");
+        int major = to!int(glGetString(GL_VERSION)[0 .. 1]);
+        legacy = legacy || (major < 3);
         _glSupport = new GLSupport(legacy);
-        if (_glSupport.valid || _glSupport.initShaders()) {
-            Log.v("shaders are ok");
-            setOpenglEnabled();
-            Log.v("OpenGL is initialized ok");
-            return true;
-        } else {
+        if (!_glSupport.valid) {
             Log.e("Failed to compile shaders");
             version (Android) {
                 // do not recreate legacy mode
@@ -769,19 +708,20 @@ bool initGLSupport(bool legacy = false) {
                 if (_glSupport.legacyMode == legacy) {
                     Log.i("Trying to reinit GLSupport with legacy flag ", !legacy);
                     _glSupport = new GLSupport(!legacy);
-                    if (_glSupport.valid || _glSupport.initShaders()) {
-                        Log.v("shaders are ok");
-                        setOpenglEnabled();
-                        Log.v("OpenGL is initialized ok");
-                        return true;
+                }
+                // Situation when opposite legacy flag is true and GL version is 3+ with no old functions
+                if (_glSupport.legacyMode) {
+                    if (major >= 3) {
+                        Log.e("Try to create OpenGL context with <= 3.1 version");
+                        return false;
                     }
                 }
             }
         }
-        return false;
     }
-    if (_glSupport.valid || _glSupport.initShaders()) {
+    if (_glSupport.valid) {
         setOpenglEnabled();
+        Log.v("OpenGL is initialized ok");
         return true;
     } else {
         Log.e("Failed to compile shaders");
@@ -794,10 +734,14 @@ final class GLSupport {
 
     private bool _legacyMode;
     @property bool legacyMode() { return _legacyMode; }
-    @property batch() { return _batch; }
+    @property queue() { return _queue; }
+
+    @property bool valid() {
+        return _legacyMode || _shadersAreInitialized;
+    }
 
     this(bool legacy = false) {
-        _batch = new OpenGLBatch();
+        _queue = new OpenGLQueue;
     	version (Android) {
             Log.d("creating GLSupport");
     	} else {
@@ -807,388 +751,176 @@ final class GLSupport {
     	    }
     	}
         _legacyMode = legacy;
+        if (!_legacyMode)
+            _shadersAreInitialized = initShaders();
     }
 
-    OpenGLBatch _batch;
-
-    SolidFillProgram _solidFillProgram;
-    LineProgram _lineProgram;
-    TextureProgram _textureProgram;
-
-    @property bool valid() {
-        return _legacyMode || _textureProgram && _solidFillProgram && _lineProgram;
+    ~this() {
+        uninitShaders();
     }
 
-    bool initShaders() {
-        Log.i("initShaders() is called");
+    private OpenGLQueue _queue;
+
+    private SolidFillProgram _solidFillProgram;
+    private TextureProgram _textureProgram;
+
+    private bool _shadersAreInitialized;
+    private bool initShaders() {
         if (_solidFillProgram is null) {
             Log.v("Compiling solid fill program");
             _solidFillProgram = new SolidFillProgram();
-            if (!_solidFillProgram.compile())
-                return false;
-        }
-        if (_lineProgram is null) {
-            Log.v("Compiling line program");
-            _lineProgram = new LineProgram();
-            if (!_lineProgram.compile())
+            _solidFillProgram.compile();
+            if (!_solidFillProgram.check())
                 return false;
         }
         if (_textureProgram is null) {
             Log.v("Compiling texture program");
             _textureProgram = new TextureProgram();
-            if (!_textureProgram.compile())
+            _textureProgram.compile();
+            if (!_textureProgram.check())
                 return false;
         }
         Log.d("Shaders compiled successfully");
         return true;
     }
 
-    bool uninitShaders() {
+    private void uninitShaders() {
         Log.d("Uniniting shaders");
         if (_solidFillProgram !is null) {
             destroy(_solidFillProgram);
             _solidFillProgram = null;
         }
-        if (_lineProgram !is null) {
-            destroy(_lineProgram);
-            _lineProgram = null;
-        }
         if (_textureProgram !is null) {
             destroy(_textureProgram);
             _textureProgram = null;
         }
-        return true;
     }
 
-    void destroyBuffers() {
+    void beforeRenderGUI() {
+        glEnable(GL_BLEND);
+        checkgl!glDisable(GL_CULL_FACE);
+        checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    private VBO vbo;
+    private EBO ebo;
+
+    private void fillBuffers(float[] vertices, float[] colors, float[] texcoords, int[] indices) {
+        resetBindings();
+
+        if(_legacyMode)
+            return;
+
+        vbo = new VBO;
+        ebo = new EBO;
+
+        vbo.bind();
+        vbo.fill([vertices, colors, texcoords]);
+
+        ebo.bind();
+        ebo.fill(indices);
+
+        // create vertex array objects and bind vertex buffers to them
+        _solidFillProgram.createVAO(vertices.length);
+        vbo.bind();
+        ebo.bind();
+        _textureProgram.createVAO(vertices.length, colors.length);
+        vbo.bind();
+        ebo.bind();
+    }
+
+    /// This function is needed to draw custom OpenGL scene correctly (especially on legacy API)
+    private void resetBindings() {
+        if (glUseProgram)
+            GLProgram.unbind();
+        if (glBindVertexArray)
+            VAO.unbind();
+        if (glBindBuffer)
+            VBO.unbind();
+    }
+
+    private void destroyBuffers() {
+        resetBindings();
+
+        if(_legacyMode)
+            return;
+
         if (_solidFillProgram)
             _solidFillProgram.destroyBuffers();
-        if (_lineProgram)
-            _lineProgram.destroyBuffers();
         if (_textureProgram)
             _textureProgram.destroyBuffers();
+
+        destroy(vbo);
+        destroy(ebo);
+        vbo = null;
+        ebo = null;
     }
 
-    void setRotation(int x, int y, int rotationAngle) {
-        /*
-        this->rotationAngle = rotationAngle;
-        rotationX = x;
-        rotationY = y;
-        if (!currentFramebufferId) {
-            rotationY = bufferDy - rotationY;
-        }
-
-        QMatrix4x4 matrix2;
-        matrix2.ortho(0, bufferDx, 0, bufferDy, 0.5f, 5.0f);
-        if (rotationAngle) {
-            matrix2.translate(rotationX, rotationY, 0);
-            matrix2.rotate(rotationAngle, 0, 0, 1);
-            matrix2.translate(-rotationX, -rotationY, 0);
-        }
-        matrix2.copyDataTo(m);
-        */
-    }
-
-    /// one rect is one line (left, top) - (right, bottom); for one line there are two color items
-    void drawLines(Rect[] lines, uint[] vertexColors) {
-        Color[] colors;
-        colors.length = vertexColors.length;
-        for (uint i = 0; i < vertexColors.length; i++)
-            FillColor(vertexColors[i], colors[i .. i + 1]);
-
-        float[] vertexArray;
-        vertexArray.assumeSafeAppend();
-        for (uint i = 0; i < lines.length; i++) {
-            Rect rc = lines[i];
-
-            float x0 = cast(float)(rc.left);
-            float y0 = cast(float)(bufferDy-rc.top);
-            float x1 = cast(float)(rc.right);
-            float y1 = cast(float)(bufferDy-rc.bottom);
-
-            // don't flip for framebuffer
-            if (currentFBO) {
-                y0 = cast(float)(rc.top);
-                y1 = cast(float)(rc.bottom);
-            }
-
-            vertexArray ~= x0;
-            vertexArray ~= y0;
-            vertexArray ~= Z_2D;
-            vertexArray ~= x1;
-            vertexArray ~= y1;
-            vertexArray ~= Z_2D;
-        }
-
-        int[] indexes = makeLineIndexesArray(lines.length);
-
+    private void drawLines(int length, int start) {
         if (_legacyMode) {
             static if (SUPPORT_LEGACY_OPENGL) {
-                glColor4f(1,1,1,1);
-                glDisable(GL_CULL_FACE);
-                glEnable(GL_BLEND);
-                glDisable(GL_ALPHA_TEST);
-                checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                checkgl!glEnableClientState(GL_VERTEX_ARRAY);
-                checkgl!glEnableClientState(GL_COLOR_ARRAY);
-                checkgl!glVertexPointer(3, GL_FLOAT, 0, cast(void*)vertexArray.ptr);
-                checkgl!glColorPointer(4, GL_FLOAT, 0, cast(void*)colors.ptr);
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glEnableClientState(GL_COLOR_ARRAY);
+                glVertexPointer(3, GL_FLOAT, 0, cast(void*)_queue._vertices.ptr);
+                glColorPointer(4, GL_FLOAT, 0, cast(void*)_queue._colors.ptr);
 
-                checkgl!glDrawElements(GL_LINES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)indexes.ptr);
+                checkgl!glDrawElements(GL_LINES, cast(int)length, GL_UNSIGNED_INT, cast(void*)(_queue._indices[start .. start + length].ptr));
 
                 glDisableClientState(GL_COLOR_ARRAY);
                 glDisableClientState(GL_VERTEX_ARRAY);
-                glDisable(GL_ALPHA_TEST);
-                glDisable(GL_BLEND);
-            }
-        } else {
-            if (_lineProgram !is null) {
-                _lineProgram.execute(vertexArray, cast(float[])colors, indexes);
-            } else
-                Log.e("No program");
-        }
-    }
-
-    static immutable float Z_2D = -2.0f;
-
-    /// make indexes for rectangle TRIANGLES (2 triangles == 6 vertexes per rect)
-    protected int[] makeRectangleIndexesArray(size_t rectCount) {
-        int[] indexes;
-        indexes.assumeSafeAppend();
-        for (uint i = 0; i < rectCount; i++) {
-            indexes ~= i * 4 + 0;
-            indexes ~= i * 4 + 1;
-            indexes ~= i * 4 + 2;
-            indexes ~= i * 4 + 1;
-            indexes ~= i * 4 + 2;
-            indexes ~= i * 4 + 3;
-        }
-        return indexes;
-    }
-
-    /// make indexes for rectangle TRIANGLES (2 triangles == 6 vertexes per rect)
-    protected int[] makeTriangleIndexesArray(size_t pointCount) {
-        int[] indexes;
-        indexes.assumeSafeAppend();
-        for (uint i = 0; i + 2 < pointCount; i += 3) {
-            indexes ~= i + 0;
-            indexes ~= i + 1;
-            indexes ~= i + 2;
-        }
-        return indexes;
-    }
-
-    /// make indexes for LINES
-    protected int[] makeLineIndexesArray(size_t lineCount) {
-        int[] indexes;
-        indexes.assumeSafeAppend();
-        for (uint i = 0; i < lineCount; i++) {
-            indexes ~= i * 2 + 0;
-            indexes ~= i * 2 + 1;
-        }
-        return indexes;
-    }
-
-    void drawSolidFillRects(Rect[] rects, uint[] vertexColors) {
-        //Log.v("drawSolidFillRects rects:", rects.length, " colors:", vertexColors.length);
-        float[] colors = convertColors(vertexColors);
-
-        float[] vertexArray;
-        vertexArray.assumeSafeAppend();
-
-        for (uint i = 0; i < rects.length; i++) {
-            Rect rc = rects[i];
-
-            float x0 = cast(float)(rc.left);
-            float y0 = cast(float)(bufferDy-rc.top);
-            float x1 = cast(float)(rc.right);
-            float y1 = cast(float)(bufferDy-rc.bottom);
-
-            // don't flip for framebuffer
-            if (currentFBO) {
-                y0 = cast(float)(rc.top);
-                y1 = cast(float)(rc.bottom);
-            }
-
-            float[3 * 4] vertices = [
-                x0,y0,Z_2D,
-                x0,y1,Z_2D,
-                x1,y0,Z_2D,
-                x1,y1,Z_2D];
-
-            vertexArray ~= vertices;
-        }
-
-        int[] indexes = makeRectangleIndexesArray(rects.length);
-
-        if (_legacyMode) {
-            static if (SUPPORT_LEGACY_OPENGL) {
-                glColor4f(1,1,1,1);
-                glDisable(GL_CULL_FACE);
-                glEnable(GL_BLEND);
-                glDisable(GL_ALPHA_TEST);
-                checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                checkgl!glEnableClientState(GL_VERTEX_ARRAY);
-                checkgl!glEnableClientState(GL_COLOR_ARRAY);
-                checkgl!glVertexPointer(3, GL_FLOAT, 0, cast(void*)vertexArray.ptr);
-                checkgl!glColorPointer(4, GL_FLOAT, 0, cast(void*)colors.ptr);
-
-                checkgl!glDrawElements(GL_TRIANGLES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)indexes.ptr);
-
-                glDisableClientState(GL_COLOR_ARRAY);
-                glDisableClientState(GL_VERTEX_ARRAY);
-                glDisable(GL_ALPHA_TEST);
-                glDisable(GL_BLEND);
             }
         } else {
             if (_solidFillProgram !is null) {
-                _solidFillProgram.execute(vertexArray, colors, indexes);
+                _solidFillProgram.drawBatch(length, start, true);
             } else
                 Log.e("No program");
         }
     }
 
-    void drawSolidFillTriangles(PointF[] points, uint[] vertexColors) {
-        //Log.v("drawSolidFillRects rects:", rects.length, " colors:", vertexColors.length);
-        float[] colors = convertColors(vertexColors);
-
-        float[] vertexArray;
-        vertexArray.assumeSafeAppend();
-
-        for (uint i = 0; i + 2 < points.length; i += 3) {
-            float x0 = points[i+0].x;
-            float y0 = currentFBO ? points[i+0].y : (bufferDy - points[i+0].y);
-            float x1 = points[i+1].x;
-            float y1 = currentFBO ? points[i+1].y : (bufferDy - points[i+1].y);
-            float x2 = points[i+2].x;
-            float y2 = currentFBO ? points[i+2].y : (bufferDy - points[i+2].y);
-
-            float[3 * 3] vertices = [
-                x0,y0,Z_2D,
-                x1,y1,Z_2D,
-                x2,y2,Z_2D];
-
-            vertexArray ~= vertices;
-        }
-
-        int[] indexes = makeTriangleIndexesArray(points.length);
-
+    private void drawSolidFillTriangles(int length, int start) {
         if (_legacyMode) {
             static if (SUPPORT_LEGACY_OPENGL) {
-                glColor4f(1,1,1,1);
-                glDisable(GL_CULL_FACE);
-                glEnable(GL_BLEND);
-                glDisable(GL_ALPHA_TEST);
-                checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                checkgl!glEnableClientState(GL_VERTEX_ARRAY);
-                checkgl!glEnableClientState(GL_COLOR_ARRAY);
-                checkgl!glVertexPointer(3, GL_FLOAT, 0, cast(void*)vertexArray.ptr);
-                checkgl!glColorPointer(4, GL_FLOAT, 0, cast(void*)colors.ptr);
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glEnableClientState(GL_COLOR_ARRAY);
+                glVertexPointer(3, GL_FLOAT, 0, cast(void*)_queue._vertices.ptr);
+                glColorPointer(4, GL_FLOAT, 0, cast(void*)_queue._colors.ptr);
 
-                checkgl!glDrawElements(GL_TRIANGLES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)indexes.ptr);
+                checkgl!glDrawElements(GL_TRIANGLES, cast(int)length, GL_UNSIGNED_INT, cast(void*)(_queue._indices[start .. start + length].ptr));
 
                 glDisableClientState(GL_COLOR_ARRAY);
                 glDisableClientState(GL_VERTEX_ARRAY);
-                glDisable(GL_ALPHA_TEST);
-                glDisable(GL_BLEND);
             }
         } else {
             if (_solidFillProgram !is null) {
-                _solidFillProgram.execute(vertexArray, colors, indexes);
+                _solidFillProgram.drawBatch(length, start);
             } else
                 Log.e("No program");
         }
     }
 
-    float[] convertColors(uint[] cols) {
-        float[] colors;
-        colors.assumeSafeAppend();
-        colors.length = cols.length * 4;
-        for (uint i = 0; i < cols.length; i++) {
-            uint color = cols[i];
-            float r = ((color >> 16) & 255) / 255.0;
-            float g = ((color >> 8) & 255) / 255.0;
-            float b = ((color >> 0) & 255) / 255.0;
-            float a = (((color >> 24) & 255) ^ 255) / 255.0;
-            colors[i * 4 + 0] = r;
-            colors[i * 4 + 1] = g;
-            colors[i * 4 + 2] = b;
-            colors[i * 4 + 3] = a;
-        }
-        return colors;
-    }
-
-    void drawColorAndTextureRects(Tex2D texture, int tdx, int tdy, Rect[] srcRects, Rect[] dstRects, uint[] vertexColors, bool linear) {
-        float[] colors = convertColors(vertexColors);
-
-        float[] vertexArray;
-        vertexArray.assumeSafeAppend();
-        float[] txcoordArray;
-        txcoordArray.assumeSafeAppend();
-
-        for (uint i = 0; i < srcRects.length; i++) {
-            Rect srcrc = srcRects[i];
-            Rect dstrc = dstRects[i];
-
-            float dstx0 = cast(float)dstrc.left;
-            float dsty0 = cast(float)(bufferDy - (dstrc.top));
-            float dstx1 = cast(float)dstrc.right;
-            float dsty1 = cast(float)(bufferDy - (dstrc.bottom));
-
-            // don't flip for framebuffer
-            if (currentFBO) {
-                dsty0 = cast(float)(dstrc.top);
-                dsty1 = cast(float)(dstrc.bottom);
-            }
-
-            float srcx0 = srcrc.left / cast(float)tdx;
-            float srcy0 = srcrc.top / cast(float)tdy;
-            float srcx1 = srcrc.right / cast(float)tdx;
-            float srcy1 = srcrc.bottom / cast(float)tdy;
-            float[3 * 4] vertices = [
-                dstx0,dsty0,Z_2D,
-                dstx0,dsty1,Z_2D,
-                dstx1,dsty0,Z_2D,
-                dstx1,dsty1,Z_2D];
-            float[2 * 4] texcoords = [srcx0,srcy0, srcx0,srcy1, srcx1,srcy0, srcx1,srcy1];
-            vertexArray ~= vertices;
-            txcoordArray ~= texcoords;
-        }
-
-        int[] indexes = makeRectangleIndexesArray(srcRects.length);
-        //Log.v("drawColorAndTextureRects srcrects:", srcRects.length, " dstrects:", dstRects.length, " colors:", vertexColors.length, " indexes: ", indexes);
-
+    private void drawColorAndTextureTriangles(Tex2D texture, bool linear, int length, int start) {
         if (_legacyMode) {
             static if (SUPPORT_LEGACY_OPENGL) {
-                glDisable(GL_CULL_FACE);
                 glEnable(GL_TEXTURE_2D);
                 texture.setup();
                 texture.setSamplerParams(linear);
 
-                glColor4f(1,1,1,1);
-                glDisable(GL_ALPHA_TEST);
+                glEnableClientState(GL_COLOR_ARRAY);
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+                glVertexPointer(3, GL_FLOAT, 0, cast(void*)_queue._vertices.ptr);
+                glTexCoordPointer(2, GL_FLOAT, 0, cast(void*)_queue._texCoords.ptr);
+                glColorPointer(4, GL_FLOAT, 0, cast(void*)_queue._colors.ptr);
 
-                glEnable(GL_BLEND);
-                checkgl!glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-                checkgl!glEnableClientState(GL_COLOR_ARRAY);
-                checkgl!glEnableClientState(GL_VERTEX_ARRAY);
-                checkgl!glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-                checkgl!glVertexPointer(3, GL_FLOAT, 0, cast(void*)vertexArray.ptr);
-                checkgl!glTexCoordPointer(2, GL_FLOAT, 0, cast(void*)txcoordArray.ptr);
-                checkgl!glColorPointer(4, GL_FLOAT, 0, cast(void*)colors.ptr);
-
-                checkgl!glDrawElements(GL_TRIANGLES, cast(int)indexes.length, GL_UNSIGNED_INT, cast(void*)indexes.ptr);
+                checkgl!glDrawElements(GL_TRIANGLES, cast(int)length, GL_UNSIGNED_INT, cast(void*)(_queue._indices[start .. start + length].ptr));
 
                 glDisableClientState(GL_TEXTURE_COORD_ARRAY);
                 glDisableClientState(GL_VERTEX_ARRAY);
                 glDisableClientState(GL_COLOR_ARRAY);
-                glDisable(GL_BLEND);
-                glDisable(GL_ALPHA_TEST);
                 glDisable(GL_TEXTURE_2D);
             }
         } else {
-            _textureProgram.execute(vertexArray, colors, txcoordArray, texture, linear, indexes);
+            _textureProgram.drawBatch(texture, linear, length, start);
         }
     }
 
@@ -1395,8 +1127,10 @@ class GLObject(GLObjectTypes type, GLuint target = 0) {
     }
 
     ~this() {
-        unbind();
-        mixin("checkgl!glDelete" ~ to!string(type) ~ "s(1, &ID);");
+        if (!glNoContext) {
+            unbind();
+            mixin("checkgl!glDelete" ~ to!string(type) ~ "s(1, &ID);");
+        }
     }
 
     void bind() {
@@ -1412,7 +1146,7 @@ class GLObject(GLObjectTypes type, GLuint target = 0) {
         else
             mixin("checkgl!glBind" ~ to!string(type) ~ "(0);");
     }
-    
+
     static if(type == GLObjectTypes.Buffer)
     {
         void fill(float[][] buffs) {
@@ -1422,7 +1156,7 @@ class GLObject(GLObjectTypes type, GLuint target = 0) {
             checkgl!glBufferData(target,
                          length * float.sizeof,
                          null,
-                         GL_STREAM_DRAW);
+                         GL_STATIC_DRAW);
             int offset;
             foreach(b; buffs) {
                 checkgl!glBufferSubData(target,
@@ -1435,7 +1169,7 @@ class GLObject(GLObjectTypes type, GLuint target = 0) {
 
         static if (target == GL_ELEMENT_ARRAY_BUFFER) {
             void fill(int[] indexes) {
-                checkgl!glBufferData(target, cast(int)(indexes.length * int.sizeof), indexes.ptr, GL_STREAM_DRAW);
+                checkgl!glBufferData(target, cast(int)(indexes.length * int.sizeof), indexes.ptr, GL_STATIC_DRAW);
             }
         }
     }
@@ -1678,95 +1412,236 @@ GLenum primitiveTypeToGL(PrimitiveType type) {
 }
 
 
-/// OpenGL batch buffer - to draw several triangles in single OpenGL call
-class OpenGLBatch {
-    private Tex2D _currentTexture;
-    private int _currentTextureDx;
-    private int _currentTextureDy;
-    private bool _currentTextureLinear;
-    private Rect[] _srcRects;
-    private Rect[] _dstRects;
-    private uint[] _colors;
-    /// clear buffers
-    void reset() {
-        _colors.length = 0;
-        _colors.assumeSafeAppend();
-        _srcRects.length = 0;
-        _srcRects.assumeSafeAppend();
-        _dstRects.length = 0;
-        _dstRects.assumeSafeAppend();
-        _currentTexture = null;
-        _currentTextureDx = 0;
-        _currentTextureDy = 0;
-        _currentTextureLinear = false;
+
+/// OpenGL GUI rendering queue. It collects gui draw calls, fills a big buffer for vertex data and draws everything
+private final class OpenGLQueue {
+
+    OpenGLBatch[] batches;
+
+    /// OpenGL batch structure - to draw several triangles in single OpenGL call
+    private struct OpenGLBatch {
+
+        enum BatchType { Line = 0, Rect, Triangle, TexturedRect }
+        BatchType type;
+
+        Tex2D texture;
+        int textureDx;
+        int textureDy;
+        bool textureLinear;
+
+        // length of batch in indices
+        int length;
+        // offset in index buffer
+        int start;
     }
-    /// draw buffered items
+
+    // a big buffer
+    float[] _vertices;
+    float[] _colors;
+    float[] _texCoords;
+    int[] _indices;
+
+
+    /// draw all
     void flush() {
-        if (_dstRects.length == 0)
-            return; // nothing to draw
-        if (_currentTexture) {
-            // draw with texture
-            //Log.v("flush ", _dstRects.length, " texture rectangles");
-            glSupport.drawColorAndTextureRects(_currentTexture, _currentTextureDx, _currentTextureDy, _srcRects, _dstRects, _colors, _currentTextureLinear);
-        } else {
-            // draw solid fill
-            //Log.v("flush ", _dstRects.length, " solid rectangles");
-            glSupport.drawSolidFillRects(_dstRects, _colors);
+        glSupport.fillBuffers(_vertices, _colors, _texCoords, _indices);
+        foreach(b; batches) {
+            switch(b.type) with(OpenGLBatch.BatchType)
+            {
+                case Line:          glSupport.drawLines(b.length, b.start); break;
+                case Rect:          glSupport.drawSolidFillTriangles(b.length, b.start); break;
+                case Triangle:      glSupport.drawSolidFillTriangles(b.length, b.start); break;
+                case TexturedRect:  glSupport.drawColorAndTextureTriangles(b.texture, b.textureLinear, b.length, b.start); break;
+                default: break;
+            }
         }
-        reset();
+        //Log.d(batches.length, " ", _vertices.length, " ", _colors.length, " ", _texCoords.length, " ", _indices.length);
+        glSupport.destroyBuffers();
+        destroy(batches);
+        destroy(_vertices);
+        destroy(_colors);
+        destroy(_texCoords);
+        destroy(_indices);
+        batches = null;
+        _vertices = null;
+        _colors = null;
+        _texCoords = null;
+        _indices = null;
     }
-    /// add textured rect
-    void addTexturedRect(Tex2D texture, int textureDx, int textureDy, uint color1, uint color2, uint color3, uint color4, Rect srcRect, Rect dstRect, bool linear) {
-        if (!_currentTexture 
-            || _currentTexture.ID != texture.ID
-            || _currentTextureLinear != linear
-            //|| (textureDx != _currentTextureDx) 
-            //|| (textureDy != _currentTextureDy) 
-            //|| true
-            ) 
+
+    static immutable float Z_2D = -2.0f;
+
+    /// add textured rectangle to queue
+    void addTexturedRect(Tex2D texture, int textureDx, int textureDy, uint color1, uint color2, uint color3, uint color4, Rect srcrc, Rect dstrc, bool linear) {
+        if (batches is null
+            || batches[$-1].type != OpenGLBatch.BatchType.TexturedRect
+            || batches[$-1].texture.ID != texture.ID
+            || batches[$-1].textureLinear != linear)
         {
-            flush();
-            _currentTexture = texture;
-            _currentTextureDx = textureDx;
-            _currentTextureDy = textureDy;
-            _currentTextureLinear = linear;
+            batches ~= OpenGLBatch();
+            batches[$-1].type = OpenGLBatch.BatchType.TexturedRect;
+            batches[$-1].texture = texture;
+            batches[$-1].textureDx = textureDx;
+            batches[$-1].textureDy = textureDy;
+            batches[$-1].textureLinear = linear;
+            if(batches.length > 1)
+                batches[$-1].start = batches[$-2].start + batches[$-2].length;
         }
-        if (_currentTexture) {
-            _srcRects ~= srcRect;
-        }
-        _dstRects ~= dstRect;
-        _colors ~= color1;
-        _colors ~= color2;
-        _colors ~= color3;
-        _colors ~= color4;
+
+        float[] colors = convertColors([color1, color2, color3, color4]);
+
+        float dstx0 = cast(float)dstrc.left;
+        float dsty0 = cast(float)(glSupport.currentFBO ? dstrc.top : (glSupport.bufferDy - dstrc.top));
+        float dstx1 = cast(float)dstrc.right;
+        float dsty1 = cast(float)(glSupport.currentFBO ? dstrc.bottom : (glSupport.bufferDy - dstrc.bottom));
+
+        float srcx0 = srcrc.left / cast(float)textureDx;
+        float srcy0 = srcrc.top / cast(float)textureDy;
+        float srcx1 = srcrc.right / cast(float)textureDx;
+        float srcy1 = srcrc.bottom / cast(float)textureDy;
+
+        float[3 * 4] vertices = [
+            dstx0,dsty0,Z_2D,
+            dstx0,dsty1,Z_2D,
+            dstx1,dsty0,Z_2D,
+            dstx1,dsty1,Z_2D ];
+
+        float[2 * 4] texCoords = [srcx0,srcy0, srcx0,srcy1, srcx1,srcy0, srcx1,srcy1];
+
+        int[] indices = makeRectangleIndicesArray(cast(int)_vertices.length / 3);
+
+        mixin(calcLengthAndAppendAllToBuffer);
     }
-    /// add solid rect
+
+    /// add solid rectangle to queue
     void addSolidRect(Rect dstRect, uint color) {
         addGradientRect(dstRect, color, color, color, color);
     }
 
-    /// add gradient rect
-    void addGradientRect(Rect dstRect, uint color1, uint color2, uint color3, uint color4) {
-        if (_currentTexture)
-            flush();
-        _dstRects ~= dstRect;
-        _colors ~= color1;
-        _colors ~= color2;
-        _colors ~= color3;
-        _colors ~= color4;
+    /// add gradient rectangle to queue
+    void addGradientRect(Rect rc, uint color1, uint color2, uint color3, uint color4) {
+        if (batches is null || batches[$-1].type != OpenGLBatch.BatchType.Rect) {
+            batches ~= OpenGLBatch();
+            batches[$-1].type = OpenGLBatch.BatchType.Rect;
+            if(batches.length > 1)
+                batches[$-1].start = batches[$-2].start + batches[$-2].length;
+        }
+
+        float[] colors = convertColors([color1, color2, color3, color4]);
+
+        float x0 = cast(float)(rc.left);
+        float y0 = cast(float)(glSupport.currentFBO ? rc.top : (glSupport.bufferDy - rc.top));
+        float x1 = cast(float)(rc.right);
+        float y1 = cast(float)(glSupport.currentFBO ? rc.bottom : (glSupport.bufferDy - rc.bottom));
+
+        float[3 * 4] vertices = [
+            x0,y0,Z_2D,
+            x0,y1,Z_2D,
+            x1,y0,Z_2D,
+            x1,y1,Z_2D ];
+        // fill texture coords buffer with zeros
+        float[2 * 4] texCoords = 0;
+
+        int[] indices = makeRectangleIndicesArray(cast(int)_vertices.length / 3);
+
+        mixin(calcLengthAndAppendAllToBuffer);
     }
 
+    /// add triangle to queue
     void addTriangle(PointF p1, PointF p2, PointF p3, uint color1, uint color2, uint color3) {
-        flush();
-        // TODO: batch triangles
-        glSupport.drawSolidFillTriangles([p1, p2, p3], [color1, color2, color3]);
+        if (batches is null || batches[$-1].type != OpenGLBatch.BatchType.Triangle) {
+            batches ~= OpenGLBatch();
+            batches[$-1].type = OpenGLBatch.BatchType.Triangle;
+            if(batches.length > 1)
+                batches[$-1].start = batches[$-2].start + batches[$-2].length;
+        }
+
+        float[] colors = convertColors([color1, color2, color3]);
+
+        float x0 = p1.x;
+        float y0 = glSupport.currentFBO ? p1.y : (glSupport.bufferDy - p1.y);
+        float x1 = p2.x;
+        float y1 = glSupport.currentFBO ? p2.y : (glSupport.bufferDy - p2.y);
+        float x2 = p3.x;
+        float y2 = glSupport.currentFBO ? p3.y : (glSupport.bufferDy - p3.y);
+
+        float[3 * 3] vertices = [
+            x0,y0,Z_2D,
+            x1,y1,Z_2D,
+            x2,y2,Z_2D ];
+        // fill texture coords buffer with zeros
+        float[2 * 3] texCoords = 0;
+
+        int[] indices = makeTriangleIndicesArray(cast(int)_vertices.length / 3);
+
+        mixin(calcLengthAndAppendAllToBuffer);
     }
 
-    /// add gradient rect
-    void addLine(Rect dstRect, uint color1, uint color2) {
-        flush();
-        // TODO: batch lines, too
-        glSupport.drawLines([dstRect], [color1, color2]);
+    /// add line to queue
+    /// rc is a line (left, top) - (right, bottom)
+    void addLine(Rect rc, uint color1, uint color2) {
+        if (batches is null || batches[$-1].type != OpenGLBatch.BatchType.Line) {
+            batches ~= OpenGLBatch();
+            batches[$-1].type = OpenGLBatch.BatchType.Line;
+            if(batches.length > 1)
+                batches[$-1].start = batches[$-2].start + batches[$-2].length;
+        }
+
+        float[] colors = convertColors([color1, color2]);
+
+        float x0 = cast(float)(rc.left);
+        float y0 = cast(float)(glSupport.currentFBO ? rc.top : (glSupport.bufferDy - rc.top));
+        float x1 = cast(float)(rc.right);
+        float y1 = cast(float)(glSupport.currentFBO ? rc.bottom : (glSupport.bufferDy - rc.bottom));
+
+        float[3 * 2] vertices = [
+            x0, y0, Z_2D,
+            x1, y1, Z_2D ];
+        // fill texture coords buffer with zeros
+        float[2 * 2] texCoords = 0;
+
+        int[] indices = makeLineIndicesArray(cast(int)_vertices.length / 3);
+
+        mixin(calcLengthAndAppendAllToBuffer);
+    }
+
+    enum calcLengthAndAppendAllToBuffer = q{
+        batches[$-1].length += cast(int)indices.length;
+
+        _vertices ~= vertices;
+        _colors ~= colors;
+        _texCoords ~= texCoords;
+        _indices ~= indices;
+    };
+
+    /// make indices for rectangle (2 triangles == 6 vertexes per rect)
+    int[6] makeRectangleIndicesArray(int offset) pure nothrow {
+        int[6] indices;
+        indices[0] = offset + 0;
+        indices[1] = offset + 1;
+        indices[2] = offset + 2;
+        indices[3] = offset + 1;
+        indices[4] = offset + 2;
+        indices[5] = offset + 3;
+
+        return indices;
+    }
+
+    /// make indices for triangles
+    int[3] makeTriangleIndicesArray(int offset) pure nothrow {
+        int[3] indices;
+        indices[0] = offset + 0;
+        indices[1] = offset + 1;
+        indices[2] = offset + 2;
+        return indices;
+    }
+
+    /// make indices for lines
+    int[2] makeLineIndicesArray(int offset) pure nothrow {
+        int[2] indices;
+        indices[0] = offset + 0;
+        indices[1] = offset + 1;
+
+        return indices;
     }
 }
-
