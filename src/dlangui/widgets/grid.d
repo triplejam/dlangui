@@ -59,7 +59,7 @@ import dlangui.widgets.scroll;
 import dlangui.widgets.menu;
 import std.conv;
 import std.container.rbtree;
-import std.algorithm : equal;
+import std.algorithm : equal, min;
 
 /// cellPopupMenu signal handler interface
 interface CellPopupMenuHandler {
@@ -1531,6 +1531,55 @@ class GridWidgetBase : ScrollWidgetBase, GridModelAdapter, MenuItemActionHandler
             sz.x += _colWidths[i];
         for (int i = 0; i < _rows; i++)
             sz.y += _rowHeights[i];
+        return sz;
+    }
+    
+    protected int _minVisibleCols = 2;
+    protected int _minVisibleRows = 2;
+
+    /// returns number of columns from 0 that are taken to measure minimum visible width
+    @property int minVisibleCols() {
+        return _minVisibleCols;
+    }
+
+    /// sets number of columns from 0 that are taken to measure minimum visible width
+    @property void minVisibleCols(int newMinVisibleCols) {
+        _minVisibleCols = newMinVisibleCols;
+        requestLayout();
+    }
+    
+    /// returns number of rows from 0 that are taken to measure minimum visible height
+    @property int minVisibleRows() {
+        return _minVisibleRows;
+    }
+
+    /// sets number of rows from 0 that are taken to measure minimum visible height, if there are too little rows last row height is multiplied
+    @property void minVisibleRows(int newMinVisibleRows) {
+        _minVisibleRows = newMinVisibleRows;
+        requestLayout();
+    }
+        
+    
+    /// calculate minimum size of widget
+    override Point minimumVisibleContentSize() {
+        Point sz;
+        if (_cols == 0 || _rows == 0) {
+             sz.x = 100;
+             sz.y = 100;
+             return sz;
+        }
+        
+        // width:
+        for (int i = 0 ; i < min(_cols, _minVisibleCols) ; i++)
+            sz.x += _colWidths[i];
+        
+        // height
+        for (int i = 0 ; i < min(_rows, _minVisibleRows) ; i++)
+            sz.y += _rowHeights[i];
+            
+        if (_rows<_minVisibleRows)
+            sz.y += (_minVisibleRows - _rows) * _rowHeights[_rows-1];
+                                
         return sz;
     }
 

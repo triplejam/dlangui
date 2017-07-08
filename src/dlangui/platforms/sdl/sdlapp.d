@@ -350,16 +350,18 @@ class SDLWindow : Window {
             Log.e("Window is shown without main widget");
             _mainWidget = new Widget();
         }
-        if (_mainWidget && !(_flags & WindowFlag.Resizable)) {
+        if (_mainWidget) {
             _mainWidget.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            SDL_SetWindowSize(_win, _mainWidget.measuredWidth, _mainWidget.measuredHeight);
+            if (flags & WindowFlag.MeasureSize) {
+                resizeWindow(Point(_mainWidget.measuredWidth, _mainWidget.measuredHeight));
+            }
+            adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
         }
+            
         SDL_ShowWindow(_win);
         if (_mainWidget)
             _mainWidget.setFocus();
         fixSize();
-        //update(true);
-        //redraw();
         SDL_RaiseWindow(_win);
         invalidate();
     }
@@ -400,8 +402,17 @@ class SDLWindow : Window {
                 res = true;
                 break;
             case WindowState.normal:
-                if (_windowState != WindowState.normal) 
+                if (_windowState != WindowState.normal) {
                     SDL_RestoreWindow(_win);
+                    version(linux) {
+                        // some SDL versions, reset windows size and position to values from create window (SDL 2.0.4) on linux (don't know how it works on macOS)
+                        if (newWindowRect.bottom == int.min && newWindowRect.right == int.min)
+                            SDL_SetWindowSize(_win, _windowRect.right, _windowRect.bottom);
+                        
+                        if (newWindowRect.top == int.min && newWindowRect.left == int.min)
+                            SDL_SetWindowPosition(_win, _windowRect.left, _windowRect.top);
+                    }
+                }
                 res = true;
                 break;
             default:

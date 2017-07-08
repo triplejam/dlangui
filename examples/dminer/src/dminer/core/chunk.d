@@ -29,7 +29,7 @@ interface CellVisitor {
 }
 
 interface ChunkVisitor {
-    void visit(World world, SmallChunk * chunk);
+    bool visit(World world, SmallChunk * chunk);
 }
 
 // vertical stack of chunks with same X, Z, and different Y
@@ -1529,6 +1529,7 @@ struct VisibilityCheckIterator {
     Vector3d camPos;
     SmallChunk * startChunk;
     ChunkVisitor visitor;
+    int maxHeight;
     int maxDistance;
     int maxDistanceSquared;
     VisibilityCheckChunk[] plannedChunks;
@@ -1549,14 +1550,21 @@ struct VisibilityCheckIterator {
         // mask test
         if (!mask)
             return;
+        if (p.y > maxHeight + 16 && p.y > startPos.y)
+            return;
         // distance test
-        Vector3d diff = p - camPos;
+        Vector3d diff = (p + Vector3d(4,4,4)) - camPos;
         if (diff.squaredLength() > maxDistanceSquared)
             return;
-        // direction test (TODO)
-        int dot = diff.dot(cameraDirection);
-        if (dot < 8000)
-            return;
+        int distance = diff.squaredLength;
+        if (distance > 16*16) {
+            diff = (diff * 256 + cameraDirection * 16) / 256;
+            //diff += cameraDirection;
+            // direction test (TODO)
+            int dot = diff.dot(cameraDirection);
+            if (dot < 8000)
+                return;
+        }
         //....
         // plan visiting
         VisibilityCheckChunk * plan = getOrAddPlannedChunk(p);
@@ -1571,7 +1579,8 @@ struct VisibilityCheckIterator {
         swap(visitedChunks, plannedChunks);
         plannedChunks.length = 0;
         foreach (ref p; visitedChunks) {
-            visitor.visit(world, p.chunk);
+            if (!visitor.visit(world, p.chunk))
+                continue;
             /// set mask of spread directions
             p.spreadToDirMask = calcSpreadMask(p.pos, startPos);
             p.tracePaths();
@@ -1613,6 +1622,9 @@ struct VisibilityCheckIterator {
         visitedChunks.length = 0;
         maxDistanceSquared = maxDistance * maxDistance;
         this.maxDistance = maxDistance;
+        maxHeight = world.regionHeight(startPos.x, startPos.z, maxDistance + 8) & 0xFFFFFF8 + 7;
+        import dlangui.core.logger;
+        Log.d("startPos: ", startPos, "  maxHeight:", maxHeight);
     }
     Vector3d cameraDirection;
     void visitVisibleChunks(ChunkVisitor visitor, Vector3d cameraDirection) {
