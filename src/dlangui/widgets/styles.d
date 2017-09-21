@@ -295,6 +295,13 @@ struct DrawableAttributeList {
             set(key, value.drawableId);
         }
     }
+    void onThemeChanged() {
+        foreach(key, ref value; _customDrawables) {
+            if (value) {
+                value.onThemeChanged();
+            }
+        }
+    }
 }
 
 /// style properties
@@ -342,12 +349,13 @@ protected:
 
 public:
     void onThemeChanged() {
+        _font.clear();
         _backgroundDrawable.clear();
         foreach(s; _substates)
             s.onThemeChanged();
         foreach(s; _children)
             s.onThemeChanged();
-        _customDrawables.clear();
+        _customDrawables.onThemeChanged();
     }
 
     @property const(Theme) theme() const {
@@ -458,6 +466,9 @@ public:
         return this;
     }
 
+    void clearCachedObjects() {
+        onThemeChanged();
+    }
 
     //===================================================
     // font properties
@@ -540,7 +551,7 @@ public:
         else
             return parentStyle.alpha;
     }
-    
+
     /// text color
     @property uint textColor() const {
         if (_textColor != COLOR_UNSPECIFIED)
@@ -564,7 +575,7 @@ public:
         else
             return parentStyle.textFlags;
     }
-    
+
     //===================================================
     // background
 
@@ -683,9 +694,9 @@ public:
     // alignment
 
     /// get full alignment (both vertical and horizontal)
-    @property ubyte alignment() const { 
+    @property ubyte alignment() const {
         if (_align != Align.Unspecified)
-            return _align; 
+            return _align;
         else
             return parentStyle.alignment;
     }
@@ -701,32 +712,37 @@ public:
     }
 
     @property Style fontFace(string face) {
+        if (_fontFace != face)
+            clearCachedObjects();
         _fontFace = face;
-        _font.clear();
         return this;
     }
 
     @property Style fontFamily(FontFamily family) {
+        if (_fontFamily != family)
+            clearCachedObjects();
         _fontFamily = family;
-        _font.clear();
         return this;
     }
 
     @property Style fontStyle(ubyte style) {
+        if (_fontStyle != style)
+            clearCachedObjects();
         _fontStyle = style;
-        _font.clear();
         return this;
     }
 
     @property Style fontWeight(ushort weight) {
+        if (_fontWeight != weight)
+            clearCachedObjects();
         _fontWeight = weight;
-        _font.clear();
         return this;
     }
 
     @property Style fontSize(int size) {
+        if (_fontSize != size)
+            clearCachedObjects();
         _fontSize = size;
-        _font.clear();
         return this;
     }
 
@@ -744,12 +760,12 @@ public:
         _alpha = alpha;
         return this;
     }
-    
+
     @property Style textFlags(uint flags) {
         _textFlags = flags;
         return this;
     }
-    
+
     @property Style backgroundColor(uint color) {
         _backgroundColor = color;
         _backgroundImageId = COLOR_DRAWABLE;
@@ -775,7 +791,7 @@ public:
         _margins.bottom = bottom;
         return this;
     }
-    
+
     @property Style padding(Rect rc) {
         _padding = rc;
         return this;
@@ -804,7 +820,7 @@ public:
         _padding.bottom = bottom;
         return this;
     }
-    
+
     debug private static __gshared int _instanceCount;
     debug @property static int instanceCount() { return _instanceCount; }
 
@@ -909,7 +925,7 @@ public:
         if (state == State.Normal)
             return this;
         //Log.d("forState ", state, " styleId=", _id, " substates=", _substates.length);
-        if (parentStyle !is null && _substates.length == 0 && parentStyle._substates.length > 0) //id is null && 
+        if (parentStyle !is null && _substates.length == 0 && parentStyle._substates.length > 0) //id is null &&
             return parentStyle.forState(state);
         foreach(item; _substates) {
             if ((item._stateMask & state) == item._stateValue)
@@ -917,13 +933,13 @@ public:
         }
         return this; // fallback to current style
     }
-    
+
     /// find substyle based on widget state (e.g. focused, pressed, ...)
     const(Style) forState(uint state) const {
         if (state == State.Normal)
             return this;
         //Log.d("forState ", state, " styleId=", _id, " substates=", _substates.length);
-        if (parentStyle !is null && _substates.length == 0 && parentStyle._substates.length > 0) //id is null && 
+        if (parentStyle !is null && _substates.length == 0 && parentStyle._substates.length > 0) //id is null &&
             return parentStyle.forState(state);
         foreach(item; _substates) {
             if ((item._stateMask & state) == item._stateValue)
@@ -931,7 +947,7 @@ public:
         }
         return this; // fallback to current style
     }
-    
+
 }
 
 /// Theme - root for style hierarhy.
@@ -957,7 +973,7 @@ class Theme : Style {
         _layoutHeight = WRAP_CONTENT;
         _layoutWeight = 1;
     }
-    
+
     ~this() {
         //Log.d("Theme destructor");
         if (unknownStyleIds.length > 0) {
@@ -968,6 +984,13 @@ class Theme : Style {
             item = null;
         }
         _byId.destroy();
+    }
+
+    override void onThemeChanged() {
+        super.onThemeChanged();
+        foreach(key, value; _byId) {
+            value.onThemeChanged();
+        }
     }
 
     /// create wrapper style which will have currentTheme.get(id) as parent instead of fixed parent - to modify some base style properties in widget
@@ -1075,7 +1098,7 @@ class Theme : Style {
         }
         return this;
     }
-    
+
     /// find substyle based on widget state (e.g. focused, pressed, ...)
     override const(Style) forState(uint state) const {
         return this;
@@ -1096,11 +1119,11 @@ private __gshared Theme _currentTheme;
 /// current theme accessor
 @property Theme currentTheme() { return _currentTheme; }
 /// set new current theme
-@property void currentTheme(Theme theme) { 
+@property void currentTheme(Theme theme) {
     if (_currentTheme !is null) {
         destroy(_currentTheme);
     }
-    _currentTheme = theme; 
+    _currentTheme = theme;
 }
 
 immutable ATTR_SCROLLBAR_BUTTON_UP = "scrollbar_button_up";
@@ -1537,20 +1560,20 @@ bool loadStyleAttributes(Style style, Element elem, bool allowStates) {
     return true;
 }
 
-/** 
+/**
  * load theme from XML document
- * 
+ *
  * Sample:
  * ---
  * <?xml version="1.0" encoding="utf-8"?>
  * <theme id="theme_custom" parent="theme_default">
- *       <style id="BUTTON" 
+ *       <style id="BUTTON"
  *             backgroundImageId="btn_background"
  *          >
  *       </style>
  * </theme>
  * ---
- * 
+ *
  */
 bool loadTheme(Theme theme, Element doc, int level = 0) {
     if (!doc.tag.name.equal("theme")) {
@@ -1599,13 +1622,13 @@ bool loadTheme(Theme theme, string resourceId, int level = 0) {
             Log.e("Cannot read XML resource ", resourceId, " from file ", filename);
             return false;
         }
-        
+
         // Check for well-formedness
         //check(s);
-    
+
         // Make a DOM tree
         auto doc = new Document(s);
-        
+
         return loadTheme(theme, doc);
     } catch (CheckException e) {
         Log.e("Invalid XML resource ", resourceId);
@@ -1631,7 +1654,7 @@ protected:
     string _drawableId;
     DrawableRef _drawable;
     bool _initialized;
-    
+
 public:
     this(string id, string drawableId) {
         _id = id;
@@ -1653,6 +1676,12 @@ public:
     void clear() {
         _drawable.clear();
         _initialized = false;
+    }
+    void onThemeChanged() {
+        if (!_drawableId) {
+            _drawable.clear();
+            _initialized = false;
+        }
     }
 }
 

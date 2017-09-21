@@ -240,6 +240,7 @@ class Win32Window : Window {
     HWND _hwnd;
     dstring _caption;
     Win32ColorDrawBuf _drawbuf;
+    private Win32Window _w32parent;
     bool useOpengl;
 
     /// win32 only - return window handle
@@ -248,8 +249,8 @@ class Win32Window : Window {
     }
 
     this(Win32Platform platform, dstring windowCaption, Window parent, uint flags, uint width = 0, uint height = 0) {
-        Win32Window w32parent = cast(Win32Window)parent;
-        HWND parenthwnd = w32parent ? w32parent._hwnd : null;
+        _w32parent = cast(Win32Window)parent;
+        HWND parenthwnd = _w32parent ? _w32parent._hwnd : null;
         _dx = width;
         _dy = height;
         if (!_dx)
@@ -258,6 +259,7 @@ class Win32Window : Window {
             _dy = 400;
         _platform = platform;
         _caption = windowCaption;
+        _windowState = WindowState.hidden;
         _flags = flags;
         uint ws = WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
         if (flags & WindowFlag.Resizable)
@@ -266,11 +268,27 @@ class Win32Window : Window {
             ws |= WS_OVERLAPPED | WS_CAPTION | WS_CAPTION | WS_BORDER | WS_SYSMENU;
         //if (flags & WindowFlag.Fullscreen)
         //    ws |= SDL_WINDOW_FULLSCREEN;
+        Rect screenRc = getScreenDimensions();
+        Log.d("Screen dimensions: ", screenRc);
+
+        int x = CW_USEDEFAULT;
+        int y = CW_USEDEFAULT;
+
+        if (flags & WindowFlag.Fullscreen) {
+            // fullscreen
+            x = screenRc.left;
+            y = screenRc.top;
+            _dx = screenRc.width;
+            _dy = screenRc.height;
+            ws = WS_POPUP;
+        }
+
+
         _hwnd = CreateWindowW(toUTF16z(WIN_CLASS_NAME),      // window class name
                             toUTF16z(windowCaption),  // window caption
                             ws,  // window style
-                            CW_USEDEFAULT,        // initial x position
-                            CW_USEDEFAULT,        // initial y position
+                            x,        // initial x position
+                            y,        // initial y position
                             _dx,        // initial x size
                             _dy,        // initial y size
                             parenthwnd,                 // parent window handle
@@ -285,6 +303,13 @@ class Win32Window : Window {
                 useOpengl = sharedGLContext.init(hDC);
             }
         }
+
+        RECT rect;
+        GetWindowRect(_hwnd, &rect);
+        handleWindowStateChange(WindowState.unspecified, Rect(rect.left, rect.top, _dx, _dy));
+
+        if (platform.defaultWindowIcon.length != 0)
+            windowIcon = drawableCache.getImage(platform.defaultWindowIcon);
     }
 
     static if (ENABLE_OPENGL) {
@@ -337,8 +362,29 @@ class Win32Window : Window {
         }
     }
 
+    protected Rect getScreenDimensions() {
+        MONITORINFO monitor_info;
+        monitor_info.cbSize = monitor_info.sizeof;
+        HMONITOR hMonitor;
+        if (_hwnd) {
+            hMonitor = MonitorFromWindow(_hwnd, MONITOR_DEFAULTTONEAREST);
+        } else {
+            hMonitor = MonitorFromPoint(POINT(0,0), MONITOR_DEFAULTTOPRIMARY);
+        }
+        GetMonitorInfo(hMonitor,
+                       &monitor_info);
+        Rect res;
+        res.left = monitor_info.rcMonitor.left;
+        res.top = monitor_info.rcMonitor.top;
+        res.right = monitor_info.rcMonitor.right;
+        res.bottom = monitor_info.rcMonitor.bottom;
+        return res;
+    }
+
+    protected bool _destroying;
     ~this() {
         debug Log.d("Window destructor");
+        _destroying = true;
         if (_drawbuf) {
             destroy(_drawbuf);
             _drawbuf = null;
@@ -436,16 +482,38 @@ class Win32Window : Window {
             _mainWidget.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
             if (flags & WindowFlag.MeasureSize)
                 resizeWindow(Point(_mainWidget.measuredWidth, _mainWidget.measuredHeight));
-            adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
+            else
+                adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
         }
         
-        ShowWindow(_hwnd, SW_SHOWNORMAL);
+        adjustPositionDuringShow();
+        
+        if (_flags & WindowFlag.Fullscreen) {
+            Rect rc = getScreenDimensions();
+            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, rc.width, rc.height, SWP_SHOWWINDOW);
+            _windowState = WindowState.fullscreen;
+        } else {
+            ShowWindow(_hwnd, SW_SHOWNORMAL);
+            _windowState = WindowState.normal;
+        }
         if (_mainWidget)
             _mainWidget.setFocus();
         SetFocus(_hwnd);
         //UpdateWindow(_hwnd);
     }
 
+    override @property Window parentWindow() {
+        return _w32parent;
+    }
+    
+    override protected void handleWindowActivityChange(bool isWindowActive) {
+        super.handleWindowActivityChange(isWindowActive);
+    }
+    
+    override @property bool isActive() {
+        return _hwnd == GetForegroundWindow();
+    }
+    
     override @property dstring windowCaption() {
         return _caption;
     }
@@ -474,6 +542,10 @@ class Win32Window : Window {
                             res = true;
                             break;
                         case WindowState.normal:
+                            ShowWindow(_hwnd, SW_SHOWNORMAL);
+                            res = true;
+                            break;
+                        case WindowState.fullscreen:
                             ShowWindow(_hwnd, SW_SHOWNORMAL);
                             res = true;
                             break;
@@ -520,6 +592,7 @@ class Win32Window : Window {
                 break;
         }
         // change size and/or position
+        bool rectChanged = false;
         if (newWindowRect != RECT_VALUE_IS_NOT_SET && (newState == WindowState.normal || newState == WindowState.unspecified)) {
             UINT flags = SWP_NOOWNERZORDER | SWP_NOZORDER;
             if (!activate)
@@ -529,20 +602,32 @@ class Win32Window : Window {
                 if (newWindowRect.bottom != int.min && newWindowRect.right != int.min) {
                     // change size only
                     SetWindowPos(_hwnd, NULL, 0, 0, newWindowRect.right + 2 * GetSystemMetrics(SM_CXDLGFRAME), newWindowRect.bottom + GetSystemMetrics(SM_CYCAPTION) + 2 * GetSystemMetrics(SM_CYDLGFRAME), flags | SWP_NOMOVE);
-                    return true;
+                    rectChanged = true;
+                    res = true;
                 }
             } else {
                 if (newWindowRect.bottom != int.min && newWindowRect.right != int.min) {
                     // change size and position
                     SetWindowPos(_hwnd, NULL, newWindowRect.left, newWindowRect.top, newWindowRect.right + 2 * GetSystemMetrics(SM_CXDLGFRAME), newWindowRect.bottom + GetSystemMetrics(SM_CYCAPTION) + 2 * GetSystemMetrics(SM_CYDLGFRAME), flags);
-                    return true;
+                    rectChanged = true;
+                    res = true;
                 } else {
                     // change position only
                     SetWindowPos(_hwnd, NULL, newWindowRect.left, newWindowRect.top, 0, 0, flags | SWP_NOSIZE);
-                    return true;
+                    rectChanged = true;
+                    res = true;
                 }
             }
         }
+        
+        if (rectChanged) {
+            handleWindowStateChange(newState, Rect(newWindowRect.left == int.min ? _windowRect.left : newWindowRect.left, 
+                newWindowRect.top == int.min ? _windowRect.top : newWindowRect.top, newWindowRect.right == int.min ? _windowRect.right : newWindowRect.right, 
+                newWindowRect.bottom == int.min ? _windowRect.bottom : newWindowRect.bottom));
+        }
+        else
+            handleWindowStateChange(newState, RECT_VALUE_IS_NOT_SET);
+        
         return res;
     }
 
@@ -555,10 +640,20 @@ class Win32Window : Window {
         _platform.onWindowDestroyed(_hwnd, this);
     }
 
+    protected bool _closeCalled;
     /// close window
     override void close() {
+        if (_closeCalled)
+            return;
+        _closeCalled = true;
         Log.d("Window.close()");
         _platform.closeWindow(this);
+    }
+    
+    override protected void handleWindowStateChange(WindowState newState, Rect newWindowRect = RECT_VALUE_IS_NOT_SET) {
+        if (_destroying)
+            return;
+        super.handleWindowStateChange(newState, newWindowRect);
     }
 
     HICON _icon;
@@ -819,11 +914,13 @@ class Win32Window : Window {
     }
 
     bool onKey(KeyAction action, uint keyCode, int repeatCount, dchar character = 0, bool syskey = false) {
+        debug(KeyInput) Log.d("enter onKey action=", action, " keyCode=", keyCode, " char=", character, "(", cast(int)character, ")", " syskey=", syskey, "    _keyFlags=", "%04x"d.format(_keyFlags));
         KeyEvent event;
         if (syskey)
             _keyFlags |= KeyFlag.Alt;
         //else
         //    _keyFlags &= ~KeyFlag.Alt;
+        uint oldFlags = _keyFlags;
         if (action == KeyAction.KeyDown || action == KeyAction.KeyUp) {
             switch(keyCode) {
                 case KeyCode.LSHIFT:
@@ -865,8 +962,8 @@ class Win32Window : Window {
                     updateKeyFlags((GetKeyState(VK_RWIN) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.RMenu, KeyFlag.LMenu);
                     updateKeyFlags((GetKeyState(VK_LMENU) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.LAlt, KeyFlag.RAlt);
                     updateKeyFlags((GetKeyState(VK_RMENU) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.RAlt, KeyFlag.LAlt);
-                    if (action == KeyAction.KeyDown)
-                        Log.d("keydown, keyFlags=", _keyFlags);
+                    //updateKeyFlags((GetKeyState(VK_LALT) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.LAlt, KeyFlag.RAlt);
+                    //updateKeyFlags((GetKeyState(VK_RALT) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.RAlt, KeyFlag.LAlt);
                     break;
             }
             //updateKeyFlags((GetKeyState(VK_CONTROL) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.Control);
@@ -874,6 +971,15 @@ class Win32Window : Window {
             //updateKeyFlags((GetKeyState(VK_MENU) & 0x8000) != 0 ? KeyAction.KeyDown : KeyAction.KeyUp, KeyFlag.Alt);
             if (keyCode == 0xBF)
                 keyCode = KeyCode.KEY_DIVIDE;
+
+            debug(KeyInput) {
+                if (oldFlags != _keyFlags) {
+                    debug(KeyInput) Log.d(" flags updated: onKey action=", action, " keyCode=", keyCode, " char=", character, "(", cast(int)character, ")", " syskey=", syskey, "    _keyFlags=", "%04x"d.format(_keyFlags));
+                }
+                //if (action == KeyAction.KeyDown)
+                //    Log.d("keydown, keyFlags=", _keyFlags);
+            }
+
             event = new KeyEvent(action, keyCode, _keyFlags);
         } else if (action == KeyAction.Text && character != 0) {
             bool ctrlAZKeyCode = (character >= 1 && character <= 26);
@@ -882,7 +988,12 @@ class Win32Window : Window {
             } else {
                 dchar[] text;
                 text ~= character;
-                event = new KeyEvent(action, 0, _keyFlags, cast(dstring)text);
+                uint newFlags = _keyFlags;
+                if ((newFlags & KeyFlag.Alt) && (newFlags & KeyFlag.Control)) {
+                    newFlags &= (~(KeyFlag.LRAlt)) & (~(KeyFlag.LRControl));
+                    debug(KeyInput) Log.d(" flags updated for text: onKey action=", action, " keyCode=", keyCode, " char=", character, "(", cast(int)character, ")", " syskey=", syskey, "    _keyFlags=", "%04x"d.format(_keyFlags));
+                }
+                event = new KeyEvent(action, 0, newFlags, cast(dstring)text);
             }
         }
         bool res = false;
@@ -1011,7 +1122,7 @@ class Win32Platform : Platform {
         for (uint i = 0; i + 1 < _windowList.length; i++) {
             if (_windowList[i] is w) {
                 for (uint j = i + 1; j < _windowList.length; j++) {
-                    if (_windowList[j].flags & WindowFlag.Modal)
+                    if (_windowList[j].flags & WindowFlag.Modal && _windowList[j].windowState != WindowState.hidden)
                         return true;
                 }
                 return false;
@@ -1022,6 +1133,8 @@ class Win32Platform : Platform {
 
     /// handle theme change: e.g. reload some themed resources
     override void onThemeChanged() {
+        if (currentTheme)
+            currentTheme.onThemeChanged();
         foreach(w; _windowMap)
             w.dispatchThemeChanged();
     }
@@ -1129,8 +1242,10 @@ int DLANGUIWinMain(void* hInstance, void* hPrevInstance,
     return result;
 }
 
+/// split command line arg list; prepend with executable file name
 string[] splitCmdLine(string line) {
     string[] res;
+    res ~= exeFilename();
     int start = 0;
     bool insideQuotes = false;
     for (int i = 0; i <= line.length; i++) {
@@ -1249,7 +1364,8 @@ int myWinMain(void* hInstance, void* hPrevInstance, char* lpCmdLine, int iCmdSho
         import core.memory : GC;
         Log.d("Calling GC.collect");
         GC.collect();
-        Log.e("Non-zero DrawBuf instance count when exiting: ", DrawBuf.instanceCount);
+        if (DrawBuf.instanceCount)
+            Log.d("Non-zero DrawBuf instance count when exiting: ", DrawBuf.instanceCount);
     }
 
     return result;
@@ -1295,17 +1411,43 @@ LRESULT WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_WINDOWPOSCHANGED:
             {
                 if (window !is null) {
-                    WINDOWPOS * pos = cast(WINDOWPOS*)lParam;
-                    Log.d("WM_WINDOWPOSCHANGED: ", *pos);
-                    GetClientRect(hwnd, &rect);
-                    if (pos.x > -30000) {// to ignore minimized state
+                    
+                    if (IsIconic(hwnd)) {
+                        window.handleWindowStateChange(WindowState.minimized);
+                    }
+                    else {
+                        WINDOWPOS * pos = cast(WINDOWPOS*)lParam;
+                        //Log.d("WM_WINDOWPOSCHANGED: ", *pos);
+
+                        GetClientRect(hwnd, &rect);
                         int dx = rect.right - rect.left;
                         int dy = rect.bottom - rect.top;
+                        WindowState state = WindowState.unspecified;
+                        if (IsZoomed(hwnd))
+                            state = WindowState.maximized;
+                        else if (IsIconic(hwnd))
+                            state = WindowState.minimized;
+                        else if (IsWindowVisible(hwnd))
+                            state = WindowState.normal;
+                        else
+                            state = WindowState.hidden;
+                        window.handleWindowStateChange(state,
+                            Rect(pos.x, pos.y, dx, dy));
                         if (window.width != dx || window.height != dy) {
                             window.onResize(dx, dy);
                             InvalidateRect(hwnd, null, FALSE);
                         }
                     }
+                }
+            }
+            return 0;
+        case WM_ACTIVATE:
+            {
+                if (window) {
+                    if (wParam == WA_INACTIVE) 
+                        window.handleWindowActivityChange(false);
+                    else if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE)
+                        window.handleWindowActivityChange(true);
                 }
             }
             return 0;
@@ -1382,7 +1524,9 @@ LRESULT WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_UNICHAR:
             if (window !is null) {
                 int repeatCount = lParam & 0xFFFF;
-                if (window.onKey(KeyAction.Text, cast(uint)wParam, repeatCount, wParam == UNICODE_NOCHAR ? 0 : cast(uint)wParam))
+                dchar ch = wParam == UNICODE_NOCHAR ? 0 : cast(uint)wParam;
+                debug(KeyInput) Log.d("WM_UNICHAR ", ch, " (", cast(int)ch, ")");
+                if (window.onKey(KeyAction.Text, cast(uint)wParam, repeatCount, ch))
                     return 1; // processed
                 return 1;
             }
@@ -1390,7 +1534,9 @@ LRESULT WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_CHAR:
             if (window !is null) {
                 int repeatCount = lParam & 0xFFFF;
-                if (window.onKey(KeyAction.Text, cast(uint)wParam, repeatCount, wParam == UNICODE_NOCHAR ? 0 : cast(uint)wParam))
+                dchar ch = wParam == UNICODE_NOCHAR ? 0 : cast(uint)wParam;
+                debug(KeyInput) Log.d("WM_CHAR ", ch, " (", cast(int)ch, ")");
+                if (window.onKey(KeyAction.Text, cast(uint)wParam, repeatCount, ch))
                     return 1; // processed
                 return 1;
             }

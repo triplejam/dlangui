@@ -1,5 +1,7 @@
 module dlangui.core.config;
 
+extern(C) @property dstring DLANGUI_VERSION();
+
 //version = USE_CONSOLE;
 
 version(USE_CONSOLE) {
@@ -15,7 +17,10 @@ version(USE_CONSOLE) {
     enum BACKEND_WIN32 = false;
     enum BACKEND_ANDROID = false;
 } else {
-    enum BACKEND_GUI = true;
+    version(USE_EXTERNAL) {}
+    else
+        enum BACKEND_GUI = true;
+
     version (NO_FREETYPE) {
         enum ENABLE_FREETYPE = false;
     } else version (USE_FREETYPE) {
@@ -93,6 +98,19 @@ version(USE_CONSOLE) {
         enum BACKEND_WIN32 = false;
         enum BACKEND_ANDROID = false;
         enum BACKEND_CONSOLE = false;
+    } else version (USE_EXTERNAL) {
+        // External backend already selected using version identifier
+        version (USE_OPENGL) {
+            enum ENABLE_OPENGL = true;
+        } else {
+            enum ENABLE_OPENGL = false;
+        }
+        enum BACKEND_GUI = false;
+        enum BACKEND_CONSOLE = false;
+        enum BACKEND_SDL = false;
+        enum BACKEND_X11 = false;
+        enum BACKEND_DSFML = false;
+        enum BACKEND_WIN32 = false;
     } else {
         // no backend selected: set default based on platform
         version (Windows) {

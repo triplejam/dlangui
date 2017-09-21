@@ -12,6 +12,8 @@
     <color id="editor_matching_bracket_highlight" value="#60FFE0B0"/>
     <color id="editor_selection_focused" value="#B060A0FF"/>
     <color id="editor_selection_normal" value="#D060A0FF"/>
+    <color id="editor_search_highlight_current" value="#60A0C0FF"/>
+    <color id="editor_search_highlight_other" value="#90F0D080"/>
     <color id="editor_left_pane_background" value="#F4F4F4"/>
     <color id="editor_left_pane_background2" value="#FFFFFF"/>
     <color id="editor_left_pane_background3" value="#F0F0F0"/>
@@ -236,7 +238,12 @@
         />
     <style id="MENU_ITEM"
         backgroundImageId="menu_item_background"
-        padding="4,2,4,2"
+        padding="4pt,2pt,4pt,2pt"
+        >
+    </style>
+    <style id="MENU_SEPARATOR"
+        backgroundImageId="menu_separator"
+        padding="4pt,2pt,4pt,2pt"
         >
     </style>
     <style id="MENU_ICON"
@@ -414,7 +421,7 @@
         margins="1,1,1,1"
         padding="2,2,2,2"
         >
-        <state state_enabled="false" alpha="160" backgroundImageId="@null"/>
+        <state state_enabled="false" alpha="160" backgroundImageId="toolbar_button_null"/>
     </style>
     <style id="TOOLBAR_CONTROL"
         backgroundImageId="toolbar_control_background"

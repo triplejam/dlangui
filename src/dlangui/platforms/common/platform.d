@@ -76,6 +76,14 @@ enum WindowState : int {
     closed,
 }
 
+///  Flags to set start window position on show
+enum ShowPosition {
+    /// do nothing just show
+    dontCare,
+    /// window will be centered on parent window
+    parentWindowCenter
+}
+
 /// Dialog display modes - used to configure dialogs should be showed as a popup or window
 enum DialogDisplayMode : ulong {
     /// show all types of dialogs in windows
@@ -97,7 +105,7 @@ enum DialogDisplayMode : ulong {
 /// Sets what's should be done when window content is too big
 enum WindowOrContentResizeMode {
     /// widgets are shrink to fit in window
-    shrinkWidgets, 
+    shrinkWidgets,
     /// resize window when window is too small
     resizeWindow,
     /// add scrollbars to window
@@ -108,6 +116,12 @@ enum WindowOrContentResizeMode {
 interface OnWindowStateHandler {
     /// signal listener - called when state of window is changed
     bool onWindowStateChange(Window window, WindowState winState, Rect rect);
+}
+
+/// Window activate/deactivate signal listener
+interface OnWindowActivityHandler {
+    /// signal listener - called when window activity is changed
+    bool onWindowActivityChange(Window window, bool isWindowActive);
 }
 
 /// protected event list
@@ -216,9 +230,11 @@ class TimerInfo {
 
 /**
  * Window abstraction layer. Widgets can be shown only inside window.
- * 
+ *
  */
 class Window : CustomEventTarget {
+    import dlangui.core.settings;
+
     protected int _dx;
     protected int _dy;
     protected uint _keyboardModifiers;
@@ -230,12 +246,12 @@ class Window : CustomEventTarget {
     protected int _minContentWidth;
     /// minimal good looking content height
     protected int _minContentHeight;
-    
+
     // current content width calculated using _windowOrContentResizeMode flag, usually used in measure()
     protected int _currentContentWidth;
     // current content height calculated using _windowOrContentResizeMode flag, usually used in measure()
     protected int _currentContentHeight;
-    
+
     @property uint flags() { return _flags; }
     @property uint backgroundColor() const { return _backgroundColor; }
     @property void backgroundColor(uint color) { _backgroundColor = color; }
@@ -243,7 +259,7 @@ class Window : CustomEventTarget {
     @property int height() const { return _dy; }
     @property uint keyboardModifiers() const { return _keyboardModifiers; }
     @property Widget mainWidget() { return _mainWidget; }
-    @property void mainWidget(Widget widget) { 
+    @property void mainWidget(Widget widget) {
         if (_mainWidget !is null) {
             _mainWidget.window = null;
             destroy(_mainWidget);
@@ -251,6 +267,57 @@ class Window : CustomEventTarget {
         _mainWidget = widget;
         if (_mainWidget !is null)
             _mainWidget.window = this;
+    }
+
+    /// save window state to setting object
+    void saveWindowState(Setting setting) {
+        if (!setting)
+            return;
+        WindowState state = windowState;
+        Rect rect = windowRect;
+        if (state == WindowState.fullscreen 
+            || state == WindowState.minimized 
+            || state == WindowState.maximized
+            || state == WindowState.normal) {
+            //
+            setting.setInteger("windowState", state);
+            if (rect.right > 0 && rect.bottom > 0) {
+                setting.setInteger("windowPositionLeft", rect.left);
+                setting.setInteger("windowPositionTop", rect.top);
+                setting.setInteger("windowWidth", rect.right);
+                setting.setInteger("windowHeight", rect.bottom);
+            }
+        }
+    }
+
+    /// restore window state from setting object
+    bool restoreWindowState(Setting setting) {
+        if (!setting)
+            return false;
+        WindowState state = cast(WindowState)setting.getInteger("windowState", WindowState.unspecified);
+        Rect rect;
+        rect.left = cast(int)setting.getInteger("windowPositionLeft", WindowState.unspecified);
+        rect.top = cast(int)setting.getInteger("windowPositionTop", 0);
+        int w = cast(int)setting.getInteger("windowWidth", 0);
+        int h = cast(int)setting.getInteger("windowHeight", 0);
+        if (w <= 0 || h <= 0)
+            return false;
+        rect.right = w;
+        rect.bottom = h;
+        if (correctWindowPositionOnScreen(rect) && (state == WindowState.fullscreen
+             || state == WindowState.minimized 
+             || state == WindowState.maximized
+             || state == WindowState.normal)) {
+             setWindowState(state, false, rect);
+             return true;
+        }
+        return false;
+    }
+
+    /// check if window position inside screen bounds; try to correct if needed; returns true if position is ok.
+    bool correctWindowPositionOnScreen(ref Rect rect) {
+        // override to apply screen size bounds
+        return true;
     }
 
     protected Rect _caretRect;
@@ -276,7 +343,19 @@ class Window : CustomEventTarget {
             adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
         }
     }
-    
+
+    protected ShowPosition _showPosition = ShowPosition.parentWindowCenter;
+
+    ///returns current window show position (don't care or parent center)
+    @property ShowPosition showPosition() {
+        return _showPosition;
+    }
+
+    /// sets window position after show (don't care or parent center)
+    @property void showPosition(ShowPosition newPosition) {
+        _showPosition = newPosition;
+    }
+
     // Abstract methods : override in platform implementation
 
     /// show window
@@ -291,6 +370,8 @@ class Window : CustomEventTarget {
     abstract void invalidate();
     /// close window
     abstract void close();
+    /// returns parent window
+    abstract @property Window parentWindow();
 
     protected WindowState _windowState = WindowState.normal;
     /// returns current window state
@@ -303,18 +384,26 @@ class Window : CustomEventTarget {
     @property Rect windowRect() {
         if (_windowRect != RECT_VALUE_IS_NOT_SET)
             return _windowRect;
-        // fake window rectangle -- at position 0,0 and 
+        // fake window rectangle -- at position 0,0 and
         return Rect(0, 0, _dx, _dy);
     }
     /// window state change signal
     Signal!OnWindowStateHandler windowStateChanged;
     /// update and signal window state and/or size/positon changes - for using in platform inplementations
     protected void handleWindowStateChange(WindowState newState, Rect newWindowRect = RECT_VALUE_IS_NOT_SET) {
-        if (newState != WindowState.unspecified)
+        bool signalWindow = false;
+        if (newState != WindowState.unspecified && newState != _windowState) {
             _windowState = newState;
-        if (newWindowRect != RECT_VALUE_IS_NOT_SET)
+            //Log.d("Window ", windowCaption, " has new state - ", newState);
+            signalWindow = true;
+        }
+        if (newWindowRect != RECT_VALUE_IS_NOT_SET && newWindowRect != _windowRect) {
             _windowRect = newWindowRect;
-        if (windowStateChanged.assigned)
+            //Log.d("Window ", windowCaption, " rect changed - ", newWindowRect);
+            signalWindow = true;
+        }
+
+        if (signalWindow && windowStateChanged.assigned)
             windowStateChanged(this, newState, newWindowRect);
     }
 
@@ -340,6 +429,29 @@ class Window : CustomEventTarget {
     /// set window rectangle
     bool moveAndResizeWindow(Rect rc, bool activate = false) { return setWindowState(WindowState.unspecified, activate, rc); }
 
+    /// centers window on parent window, do nothing if there is no parent window
+    void centerOnParentWindow() {
+        if (parentWindow) {
+            Rect parentRect = parentWindow.windowRect();
+            Point newPos;
+            newPos.x = parentRect.left + (parentRect.right - _windowRect.right) / 2;
+            newPos.y = parentRect.top + (parentRect.bottom - _windowRect.bottom) / 2;
+            moveWindow(newPos);
+        }
+    }
+
+    ///adjust window position during show()
+    protected void adjustPositionDuringShow() {
+        final switch (_showPosition) {
+            case ShowPosition.dontCare:
+                return;
+            case ShowPosition.parentWindowCenter: {
+                centerOnParentWindow();
+                break;
+            }
+        }
+    }
+
     // things needed for WindowOrContentResizeMode.scrollWindow:
     /// vertical scrollbar control
     protected ScrollBar _vScrollBar = null;
@@ -354,7 +466,7 @@ class Window : CustomEventTarget {
             resizeWindow(Point(minContentWidth, minContentHeight));
         updateWindowOrContentSize();
     }
-    
+
     /// update current content size based on windowOrContentResizeMode flag, usually used when window is resized
     void updateWindowOrContentSize() {
         final switch (_windowOrContentResizeMode) {
@@ -409,7 +521,7 @@ class Window : CustomEventTarget {
                     }
                     _currentContentWidth = _windowRect.right;
                 }
-                    
+
                 if (windowRect().bottom < _minContentHeight) {
                     // create scrollbar
                     _currentContentHeight = _minContentHeight;
@@ -441,7 +553,7 @@ class Window : CustomEventTarget {
                         _vScrollBar.setRange(0, _minContentHeight);
                     _vScrollBar.pageSize(windowRect().bottom);
                     _vScrollBar.position(0);
-                    
+
                     if (!_hScrollBar)
                         _currentContentWidth = _windowRect.right - _vScrollBar.measuredWidth;
                 }
@@ -456,8 +568,8 @@ class Window : CustomEventTarget {
             }
         }
     }
-    
-    
+
+
     /// requests layout for main widget and popups
     void requestLayout() {
         if (_mainWidget)
@@ -474,10 +586,10 @@ class Window : CustomEventTarget {
     void measure() {
         if (_hScrollBar)
             _hScrollBar.measure(_dx, _dy);
-            
+
         if (_vScrollBar)
             _vScrollBar.measure(_dx, _dy);
-        
+
         if (_mainWidget !is null) {
             _mainWidget.measure(_currentContentWidth, _currentContentHeight);
         }
@@ -489,18 +601,18 @@ class Window : CustomEventTarget {
     void layout() {
         if (_hScrollBar)
             _hScrollBar.layout(Rect(0, _dy - _hScrollBar.measuredHeight, _vScrollBar ? _dx - _vScrollBar.measuredWidth : _dx, _dy));
-            
+
         if (_vScrollBar)
             _vScrollBar.layout(Rect(_dx - _vScrollBar.measuredWidth, 0, _dx, _hScrollBar ? _dy - _hScrollBar.measuredHeight : _dy));
-        
+
         int deltaX = 0;
         if (_hScrollBar)
             deltaX = -_hScrollBar.position;
-            
+
         int deltaY = 0;
         if (_vScrollBar)
             deltaY = -_vScrollBar.position;
-            
+
         Rect rc = Rect(deltaX, deltaY, _currentContentWidth + deltaX, _currentContentHeight + deltaY);
         if (_mainWidget !is null) {
             _mainWidget.layout(rc);
@@ -732,16 +844,16 @@ class Window : CustomEventTarget {
         destroy(_timerQueue);
         _eventList = null;
     }
-    
+
     /**
     Allows queue destroy of widget.
-    
-    Sometimes when you have very complicated UI with dynamic create/destroy lists of widgets calling simple destroy() 
+
+    Sometimes when you have very complicated UI with dynamic create/destroy lists of widgets calling simple destroy()
     on widget makes segmentation fault.
-    
+
     Usually because you destroy widget that on some stage call another that tries to destroy widget that calls it.
     When the control flow returns widget not exist and you have seg. fault.
-    
+
     This function use internally $(LINK2 $(DDOX_ROOT_DIR)dlangui/core/events/QueueDestroyEvent.html, QueueDestroyEvent).
     */
     void queueWidgetDestroy(Widget widgetToDestroy)
@@ -749,7 +861,7 @@ class Window : CustomEventTarget {
         QueueDestroyEvent ev = new QueueDestroyEvent(widgetToDestroy);
         postEvent(ev);
     }
-    
+
     private void animate(Widget root, long interval) {
         if (root is null)
             return;
@@ -828,7 +940,7 @@ class Window : CustomEventTarget {
                 _vScrollBar.onDraw(buf);
             if (_hScrollBar && _vScrollBar)
                 buf.fillRect(Rect(_vScrollBar.left, _hScrollBar.top, buf.width, buf.height), _backgroundColor);
-                
+
             long drawEnd = currentTimeMillis;
             debug(DebugRedraw) {
                 if (drawEnd - drawStart > PERFORMANCE_LOGGING_THRESHOLD_MS)
@@ -854,11 +966,12 @@ class Window : CustomEventTarget {
     }
 
     protected Widget _focusedWidget;
+    protected auto _focusStateToApply = State.Focused;
     /// returns current focused widget
-    @property Widget focusedWidget() { 
+    @property Widget focusedWidget() {
         if (!isChild(_focusedWidget))
             _focusedWidget = null;
-        return _focusedWidget; 
+        return _focusedWidget;
     }
 
     /// change focus to widget
@@ -869,6 +982,7 @@ class Window : CustomEventTarget {
         auto targetState = State.Focused;
         if(reason == FocusReason.TabFocus)
             targetState = State.Focused | State.KeyboardFocused;
+        _focusStateToApply = targetState;
         if (oldFocus is newFocus)
             return oldFocus;
         if (oldFocus !is null) {
@@ -889,6 +1003,40 @@ class Window : CustomEventTarget {
             //requestActionsUpdate();
         }
         return _focusedWidget;
+    }
+
+    protected Widget removeFocus() {
+        if (!isChild(_focusedWidget))
+            _focusedWidget = null;
+        if (_focusedWidget) {
+            _focusedWidget.resetState(_focusStateToApply);
+            update();
+        }
+        return _focusedWidget;
+    }
+
+    protected Widget applyFocus() {
+        if (!isChild(_focusedWidget))
+            _focusedWidget = null;
+        if (_focusedWidget) {
+            _focusedWidget.setState(_focusStateToApply);
+            update();
+        }
+        return _focusedWidget;
+    }
+
+    abstract @property bool isActive();
+
+    /// window state change signal
+    Signal!OnWindowActivityHandler windowActivityChanged;
+
+    protected void handleWindowActivityChange(bool isWindowActive) {
+        if (isWindowActive)
+            applyFocus();
+        else
+            removeFocus();
+        if (windowActivityChanged.assigned)
+            windowActivityChanged(this, isWindowActive);
     }
 
     /// dispatch key event to widgets which have wantsKeyTracking == true
@@ -1037,7 +1185,7 @@ class Window : CustomEventTarget {
     protected bool _mouseCaptureFocusedOut;
     /// does current capture widget want to receive move events even if pointer left it
     protected bool _mouseCaptureFocusedOutTrackMovements;
-    
+
     protected void clearMouseCapture() {
         _mouseCaptureWidget = null;
         _mouseCaptureFocusedOut = false;
@@ -1051,7 +1199,7 @@ class Window : CustomEventTarget {
         clearMouseCapture();
         return res;
     }
-    
+
     protected bool sendAndCheckOverride(Widget widget, MouseEvent event) {
         if (!isChild(widget))
             return false;
@@ -1336,7 +1484,7 @@ class Window : CustomEventTarget {
             }
             if (!modal) {
                 res = false;
-                if (_hScrollBar) 
+                if (_hScrollBar)
                     res = dispatchMouseEvent(_hScrollBar, event, cursorIsSet);
                 if (!res && _vScrollBar)
                     res = dispatchMouseEvent(_vScrollBar, event, cursorIsSet);
@@ -1344,7 +1492,7 @@ class Window : CustomEventTarget {
                     res = dispatchMouseEvent(_mainWidget, event, cursorIsSet);
             }
             else {
-                if (_hScrollBar) 
+                if (_hScrollBar)
                     res = dispatchMouseEvent(_hScrollBar, event, cursorIsSet);
                 if (!res && _vScrollBar)
                     res = dispatchMouseEvent(_vScrollBar, event, cursorIsSet);
@@ -1621,11 +1769,11 @@ class Window : CustomEventTarget {
 
 /**
  * Platform abstraction layer.
- * 
+ *
  * Represents application.
- * 
- * 
- * 
+ *
+ *
+ *
  */
 class Platform {
     static __gshared Platform _instance;
@@ -1644,9 +1792,9 @@ class Platform {
      *         windowCaption = window caption text
      *         parent = parent Window, or null if no parent
      *         flags = WindowFlag bit set, combination of Resizable, Modal, Fullscreen
-     *      width = window width 
+     *      width = window width
      *      height = window height
-     * 
+     *
      * Window w/o Resizable nor Fullscreen will be created with size based on measurement of its content widget
      */
     abstract Window createWindow(dstring windowCaption, Window parent, uint flags = WindowFlag.Resizable, uint width = 0, uint height = 0);
@@ -1665,13 +1813,13 @@ class Platform {
     }
     /**
      * close window
-     * 
+     *
      * Closes window earlier created with createWindow()
      */
     abstract void closeWindow(Window w);
     /**
      * Starts application message loop.
-     * 
+     *
      * When returned from this method, application is shutting down.
      */
     abstract int enterMessageLoop();
@@ -1751,13 +1899,13 @@ class Platform {
     @property ulong uiDialogDisplayMode() {
         return _uiDialogDisplayMode;
     }
-    
+
     // sets how dialogs should be displayed - as popup or window - use DialogDisplayMode enumeration
     @property Platform uiDialogDisplayMode(ulong newDialogDisplayMode) {
         _uiDialogDisplayMode = newDialogDisplayMode;
         return this;
     }
-    
+
     protected string[] _resourceDirs;
     /// returns list of resource directories
     @property string[] resourceDirs() { return _resourceDirs; }
@@ -1788,6 +1936,20 @@ class Platform {
     void onThemeChanged() {
         // override and call dispatchThemeChange for all windows
     }
+
+    /// default icon for new created windows
+    private string _defaultWindowIcon = "dlangui-logo1";
+
+    /// sets default icon for new created windows
+    @property void defaultWindowIcon(string newIcon) {
+        _defaultWindowIcon = newIcon;
+    }
+
+    /// gets default icon for new created windows
+    @property string defaultWindowIcon() {
+        return _defaultWindowIcon;
+    }
+
 
 }
 
@@ -1831,32 +1993,36 @@ static if (BACKEND_CONSOLE) {
 
 /// put "mixin APP_ENTRY_POINT;" to main module of your dlangui based app
 mixin template APP_ENTRY_POINT() {
-    static if (BACKEND_CONSOLE) {
-        int main(string[] args)
-        {
-            return DLANGUImain(args);
-        }
+    version (unittest) {
+        // no main in unit tests
     } else {
-        /// workaround for link issue when WinMain is located in library
-        version(Windows) {
-            extern (Windows) int WinMain(void* hInstance, void* hPrevInstance,
-                                         char* lpCmdLine, int nCmdShow)
+        static if (BACKEND_CONSOLE) {
+            int main(string[] args)
             {
-                try {
-                    int res = DLANGUIWinMain(hInstance, hPrevInstance,
-                                             lpCmdLine, nCmdShow);
-                    return res;
-                } catch (Exception e) {
-                    Log.e("Exception: ", e);
-                    return 1;
-                }
+                return DLANGUImain(args);
             }
         } else {
-            version (Android) {
-            } else {
-                int main(string[] args)
+            /// workaround for link issue when WinMain is located in library
+            version(Windows) {
+                extern (Windows) int WinMain(void* hInstance, void* hPrevInstance,
+                                                char* lpCmdLine, int nCmdShow)
                 {
-                    return DLANGUImain(args);
+                    try {
+                        int res = DLANGUIWinMain(hInstance, hPrevInstance,
+                                                    lpCmdLine, nCmdShow);
+                        return res;
+                    } catch (Exception e) {
+                        Log.e("Exception: ", e);
+                        return 1;
+                    }
+                }
+            } else {
+                version (Android) {
+                } else {
+                    int main(string[] args)
+                    {
+                        return DLANGUImain(args);
+                    }
                 }
             }
         }

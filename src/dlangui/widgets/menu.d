@@ -103,13 +103,13 @@ class MenuItem {
             return MenuItemType.Separator;
         if (_subitems.length > 0) // if there are children, force type to Submenu
             return MenuItemType.Submenu;
-        return _type; 
+        return _type;
     }
 
     /// set new MenuItemType
     @property MenuItem type(MenuItemType type) {
         _type = type;
-        return this; 
+        return this;
     }
 
     /// get check for checkbox or radio button item
@@ -150,7 +150,7 @@ class MenuItem {
         }
         return this;
     }
-    
+
     /// get hotkey character from label (e.g. 'F' for item labeled "&File"), 0 if no hotkey
     dchar getHotkey() {
         static import std.uni;
@@ -205,6 +205,13 @@ class MenuItem {
     MenuItem add(MenuItem subitem) {
         _subitems ~= subitem;
         subitem._parent = this;
+        return this;
+    }
+    /// adds submenu checkbox item
+    MenuItem addCheck(const Action a) {
+        MenuItem res = new MenuItem(a);
+        res.type = MenuItemType.Check;
+        add(res);
         return this;
     }
     /// adds submenu item(s) from one or more actions (will return item for last action)
@@ -307,6 +314,8 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
         _accelWidth = maxAccelWidth;
     }
     void measureSubitems(ref int maxLabelWidth, ref int maxHeight, ref int maxIconWidth, ref int maxAccelWidth) {
+        if (_item.type == MenuItemType.Separator)
+            return;
         _label.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
         if (maxLabelWidth < _label.measuredWidth)
             maxLabelWidth = _label.measuredWidth;
@@ -328,10 +337,14 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
         }
     }
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         updateState();
         Rect m = margins;
         Rect p = padding;
+        if (_item.type == MenuItemType.Separator) {
+            measuredContent(parentWidth, parentHeight, 1, 1); // for vertical (popup menu)
+            return;
+        }
         // calc size constraints for children
         int pwidth = parentWidth;
         int pheight = parentHeight;
@@ -354,6 +367,9 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
             return;
         }
         _pos = rc;
+        if (_item.type == MenuItemType.Separator)
+            return;
+
         applyMargins(rc);
         applyPadding(rc);
         Rect labelRc = rc;
@@ -395,47 +411,60 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
         id="menuitem";
         _mainMenu = mainMenu;
         _item = item;
-        styleId = STYLE_MENU_ITEM;
         updateState();
-        string iconId = _item.action !is null ? _item.action.iconId : "";
-        if (_item.type == MenuItemType.Check)
-            iconId = "btn_check";
-        else if (_item.type == MenuItemType.Radio)
-            iconId = "btn_radio";
-        // icon
-        if (_item.action && iconId.length) {
-            _icon = new ImageWidget("MENU_ICON", iconId);
-            _icon.styleId = STYLE_MENU_ICON;
-            _icon.state = State.Parent;
-            addChild(_icon);
-        }
-        // label
-        _label = new TextWidget("MENU_LABEL");
-        _label.text = _item.label;
-        _label.styleId = _mainMenu ? "MAIN_MENU_LABEL" : "MENU_LABEL";
-        _label.state = State.Parent;
-        addChild(_label);
-        // accelerator
-        dstring acc = _item.acceleratorText;
-        if (_item.isSubmenu && !mainMenu) {
-            version (Windows) {
-                acc = ">"d;
-                //acc = "►"d;
-            } else {
-                acc = "‣"d;
+        if (_item.type == MenuItemType.Separator) {
+            styleId = "MENU_SEPARATOR";
+            trackHover = false;
+            clickable = false;
+        } else {
+            styleId = STYLE_MENU_ITEM;
+            string iconId = _item.action !is null ? _item.action.iconId : "";
+            if (_item.type == MenuItemType.Check)
+                iconId = "btn_check";
+            else if (_item.type == MenuItemType.Radio)
+                iconId = "btn_radio";
+            // icon
+            if (_item.action && iconId.length) {
+                _icon = new ImageWidget("MENU_ICON", iconId);
+                _icon.styleId = STYLE_MENU_ICON;
+                _icon.state = State.Parent;
+                addChild(_icon);
             }
+            // label
+            _label = new TextWidget("MENU_LABEL");
+            _label.text = _item.label;
+            _label.styleId = _mainMenu ? "MAIN_MENU_LABEL" : "MENU_LABEL";
+            _label.state = State.Parent;
+            addChild(_label);
+            // accelerator
+            dstring acc = _item.acceleratorText;
+            if (_item.isSubmenu && !mainMenu) {
+                version (Windows) {
+                    acc = ">"d;
+                    //acc = "►"d;
+                } else {
+                    acc = "‣"d;
+                }
+            }
+            if (acc !is null) {
+                _accel = new TextWidget("MENU_ACCEL");
+                _accel.styleId = STYLE_MENU_ACCEL;
+                _accel.text = acc;
+                _accel.state = State.Parent;
+                if (_item.isSubmenu && !mainMenu)
+                    _accel.alignment = Align.Right | Align.VCenter;
+                addChild(_accel);
+            }
+            trackHover = true;
+            clickable = true;
         }
-        if (acc !is null) {
-            _accel = new TextWidget("MENU_ACCEL");
-            _accel.styleId = STYLE_MENU_ACCEL;
-            _accel.text = acc;
-            _accel.state = State.Parent;
-            if (_item.isSubmenu && !mainMenu)
-                _accel.alignment = Align.Right | Align.VCenter;
-            addChild(_accel);
-        }
-        trackHover = true;
-        clickable = true;
+    }
+}
+
+class SeparatorMenuItemWidget : MenuItemWidget {
+    this(MenuItem item, bool mainMenu) {
+        super(item, mainMenu);
+        id="menuseparator";
     }
 }
 
@@ -458,6 +487,15 @@ class MenuWidgetBase : ListWidget {
         id = "popup_menu";
         styleId = STYLE_POPUP_MENU;
         menuItems = item;
+    }
+
+    /// handle theme change: e.g. reload some themed resources
+    override void onThemeChanged() {
+        super.onThemeChanged();
+        if (_openedMenu)
+            _openedMenu.onThemeChanged();
+        if (_openedPopup)
+            _openedPopup.onThemeChanged();
     }
 
     @property void menuItems(MenuItem item) {
@@ -934,7 +972,7 @@ class MainMenu : MenuWidgetBase {
         Signal!MenuItemClickHandler onMenuItemClickListenerCopy = menuItemClick;
         // copy item action listeners
         Signal!MenuItemActionHandler onMenuItemActionListenerCopy = menuItemAction;
-        
+
         deactivate();
 
         handleMenuItemClick(item);

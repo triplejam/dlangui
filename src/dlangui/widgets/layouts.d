@@ -26,6 +26,7 @@ Authors:   Vadim Lopatin, coolreader.org@gmail.com
 module dlangui.widgets.layouts;
 
 public import dlangui.widgets.widget;
+import std.conv;
 
 /// helper for layouts
 struct LayoutItem {
@@ -109,12 +110,30 @@ class LayoutItems {
         _maxSecondarySize = 0;
         _measureParentSize.x = parentWidth;
         _measureParentSize.y = parentHeight;
+        bool hasPercentSizeWidget = false;
+        size_t percenSizeWidgetIndex;
         // measure
         for (int i = 0; i < _count; i++) {
             LayoutItem * item = &_list[i];
+
             item.measure(parentWidth, parentHeight);
+
+            if (isPercentSize(item._layoutSize)) {
+                if (!hasPercentSizeWidget) {
+                    percenSizeWidgetIndex = i;
+                    hasPercentSizeWidget = true;
+                }
+            }
+            else
+                _totalSize += item._measuredSize;
+
             if (_maxSecondarySize < item._secondarySize)
                 _maxSecondarySize = item._secondarySize;
+        }
+        if (hasPercentSizeWidget) {
+            LayoutItem * item = &_list[percenSizeWidgetIndex];
+            if (_totalSize > 0)
+                item._measuredSize = to!int(_totalSize * ((1 / (1 - cast (double) (fromPercentSize(item._layoutSize, 100))/100)) - 1));
             _totalSize += item._measuredSize;
         }
         return _orientation == Orientation.Horizontal ? Point(_totalSize, _maxSecondarySize) : Point(_maxSecondarySize, _totalSize);
@@ -161,7 +180,7 @@ class LayoutItems {
                 maxItem = item.secondarySize;
             if (item._isResizer) {
                 resizersSize += size;
-            } else if (item.fillParent) {
+            } else if (item.fillParent || isPercentSize(item.layoutSize)) {
                 resizableWeight += weight;
                 resizableSize += size * weight;
             } else {
@@ -174,7 +193,7 @@ class LayoutItems {
                 contentSecondarySize = maxItem;
             else
                 contentSecondarySize = rc.width;
-            if (_layoutHeight == FILL_PARENT && totalSize < rc.height && resizableSize > 0) {
+            if ((_layoutHeight == FILL_PARENT || isPercentSize(_layoutHeight)) && totalSize < rc.height && resizableSize > 0) {
                 delta = rc.height - totalSize; // total space to add to fit
             } else if (totalSize > rc.height) {
                 delta = rc.height - totalSize; // total space to reduce to fit
@@ -184,7 +203,7 @@ class LayoutItems {
                 contentSecondarySize = maxItem;
             else
                 contentSecondarySize = rc.height;
-            if (_layoutWidth == FILL_PARENT && totalSize < rc.width && resizableSize > 0)
+            if ((_layoutWidth == FILL_PARENT || isPercentSize(_layoutWidth)) && totalSize < rc.width && resizableSize > 0)
                 delta = rc.width - totalSize; // total space to add to fit
             else if (totalSize > rc.width)
                 delta = rc.width - totalSize; // total space to reduce to fit
@@ -216,7 +235,7 @@ class LayoutItems {
         int resizerDelta = 0;
         for (int i = 0; i < _count; i++) {
             LayoutItem * item = &_list[i];
-            if ((item.fillParent || needForceResize) && (delta < 0 || item.canExtend)) {
+            if ((item.fillParent || isPercentSize(item.layoutSize) || needForceResize) && (delta < 0 || item.canExtend)) {
                 lastResized = i;
             }
             if (item._isResizer) {
@@ -232,7 +251,7 @@ class LayoutItems {
             int layoutSize = item.layoutSize;
             int weight = item.weight;
             int size = item.measuredSize;
-            if (needResize && (layoutSize == FILL_PARENT || needForceResize)) {
+            if (needResize && (layoutSize == FILL_PARENT || isPercentSize(layoutSize) || needForceResize)) {
                 // do resize
                 int correction = (delta < 0 || item.canExtend) ? scaleFactor * weight * size / 10000 : 0;
                 deltaTotal += correction;
@@ -344,11 +363,11 @@ class ResizerWidget : Widget {
         }
     }
 
-    /** 
-       Measure widget according to desired width and height constraints. (Step 1 of two phase layout). 
+    /**
+       Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
 
     */
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         updateProps();
         if (_orientation == Orientation.Vertical) {
 
@@ -472,18 +491,18 @@ class ResizerWidget : Widget {
         }
         if (event.action == MouseAction.Move && trackHover) {
             if (!(state & State.Hovered)) {
-                Log.d("Hover ", id);
+                //Log.d("Hover ", id);
                 setState(State.Hovered);
             }
             return true;
         }
         if ((event.action == MouseAction.Leave || event.action == MouseAction.Cancel) && trackHover) {
-            Log.d("Leave ", id);
+            //Log.d("Leave ", id);
             resetState(State.Hovered);
             return true;
         }
         if (event.action == MouseAction.Cancel) {
-            Log.d("SliderButton.onMouseEvent event.action == MouseAction.Cancel");
+            //Log.d("SliderButton.onMouseEvent event.action == MouseAction.Cancel");
             if (_dragging) {
                 resetState(State.Pressed);
                 _dragging = false;
@@ -519,7 +538,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
 
     LayoutItems _layoutItems;
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -545,6 +564,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
         _pos = rc;
         applyMargins(rc);
         applyPadding(rc);
+        //debug Log.d("LinearLayout.layout id=", _id, " rc=", rc, " fillHoriz=", layoutWidth == FILL_PARENT);
         _layoutItems.layout(rc);
     }
 
@@ -587,7 +607,7 @@ class FrameLayout : WidgetGroupDefaultDrawing {
         super(ID);
     }
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -764,12 +784,15 @@ class TableLayout : WidgetGroupDefaultDrawing {
         }
 
         Point measure(Widget parent, int cc, int rc, int pwidth, int pheight, bool layoutWidthFill, bool layoutHeightFill) {
+            //Log.d("grid measure ", parent.id, " pw=", pwidth, " ph=", pheight);
             initialize(cc, rc, layoutWidthFill, layoutHeightFill);
             for (int y = 0; y < rc; y++) {
                 for (int x = 0; x < cc; x++) {
                     int index = y * cc + x;
                     Widget child = index < parent.childCount ? parent.child(index) : null;
                     cell(x, y).measure(child, pwidth, pheight);
+                    //if (child)
+                    //    Log.d("cell ", x, ",", y, " child=", child.id, " measuredWidth=", child.measuredWidth, " minWidth=", child.minWidth);
                 }
             }
             // calc total row size
@@ -788,6 +811,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
                 }
                 totalWidth += col(x).measuredSize;
             }
+            //Log.d("             ", parent.id, " w=", totalWidth, " h=", totalHeight);
             return Point(totalWidth, totalHeight);
         }
 
@@ -836,6 +860,13 @@ class TableLayout : WidgetGroupDefaultDrawing {
                             delta0 = 0;
                         }
                     }
+                } else if (extraSize < 0) {
+                    for (int x = 0; x < colCount; x++) {
+                        if (fillCount == 0 || col(x).fill) {
+                            col(x).size += delta + delta0;
+                            delta0 = 0;
+                        }
+                    }
                 }
             }
         }
@@ -876,7 +907,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
           "colCount"));
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -903,7 +934,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
         applyPadding(rc);
         _cells.layout(rc);
     }
-    
+
 }
 
 //import dlangui.widgets.metadata;

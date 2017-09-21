@@ -21,6 +21,9 @@ class ConsoleWindow : Window {
         _parent = cast(ConsoleWindow)parent;
         _dx = _platform.console.width;
         _dy = _platform.console.height;
+        _currentContentWidth = _dx;
+        _currentContentHeight = _dy;
+        _windowRect = Rect(0, 0, _dx, _dy);
     }
     /// show window
     override void show() {
@@ -29,6 +32,8 @@ class ConsoleWindow : Window {
             _mainWidget = new Widget();
         }
         _visible = true;
+        handleWindowStateChange(WindowState.normal, Rect(0, 0, _platform.console.width, _platform.console.height));
+        invalidate();
     }
     private dstring _windowCaption;
     /// returns window caption
@@ -52,6 +57,21 @@ class ConsoleWindow : Window {
         Log.d("ConsoleWindow.close()");
         _platform.closeWindow(this);
     }
+
+    override @property Window parentWindow() {
+        return _parent;
+    }
+
+    override protected void handleWindowActivityChange(bool isWindowActive) {
+        super.handleWindowActivityChange(isWindowActive);
+    }
+
+    override @property bool isActive() {
+        // todo
+        return true;
+    }
+
+
     protected bool _visible;
     /// returns true if window is shown
     @property bool visible() {
@@ -89,9 +109,9 @@ class ConsolePlatform : Platform {
     *         windowCaption = window caption text
     *         parent = parent Window, or null if no parent
     *         flags = WindowFlag bit set, combination of Resizable, Modal, Fullscreen
-    *      width = window width 
+    *      width = window width
     *      height = window height
-    * 
+    *
     * Window w/o Resizable nor Fullscreen will be created with size based on measurement of its content widget
     */
     override Window createWindow(dstring windowCaption, Window parent, uint flags = WindowFlag.Resizable, uint width = 0, uint height = 0) {
@@ -200,7 +220,7 @@ class ConsolePlatform : Platform {
     }
     /**
     * close window
-    * 
+    *
     * Closes window earlier created with createWindow()
     */
     override void closeWindow(Window w) {
@@ -208,7 +228,7 @@ class ConsolePlatform : Platform {
     }
     /**
     * Starts application message loop.
-    * 
+    *
     * When returned from this method, application is shutting down.
     */
     override int enterMessageLoop() {
@@ -261,7 +281,7 @@ class ConsoleDrawBuf : DrawBuf {
         // TODO?
     }
     /// reserved for hardware-accelerated drawing - ends drawing batch
-    override void afterDrawing() { 
+    override void afterDrawing() {
         // TODO?
     }
     /// returns buffer bits per pixel
@@ -358,7 +378,7 @@ class ConsoleDrawBuf : DrawBuf {
     }
 
 
-    static immutable dstring SPACE_STRING = 
+    static immutable dstring SPACE_STRING =
         "                                                                                                    "
       ~ "                                                                                                    "
       ~ "                                                                                                    "
@@ -386,7 +406,7 @@ class ConsoleDrawBuf : DrawBuf {
         fillRect(rc, color);
     }
 
-    /// draw pixel at (x, y) with specified color 
+    /// draw pixel at (x, y) with specified color
     override void drawPixel(int x, int y, uint color) {
         // TODO
     }

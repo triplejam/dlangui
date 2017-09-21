@@ -55,6 +55,7 @@ class Dialog : VerticalLayout {
     protected string _icon;
     protected int _initialWidth;
     protected int _initialHeight;
+    protected int _defaultButtonIndex = -1;
 
     Signal!DialogResultHandler dialogResult;
 
@@ -65,13 +66,13 @@ class Dialog : VerticalLayout {
         _caption = caption;
         _parentWindow = parentWindow;
         _flags = flags;
-        _icon = "dlangui-logo1";
+        _icon = "";
     }
 
-    /** 
-        Measure widget according to desired width and height constraints. (Step 1 of two phase layout). 
+    /**
+        Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
     */
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         super.measure(parentWidth, parentHeight);
         if ((_flags & DialogFlag.Resizable) && (_flags & DialogFlag.Popup)) {
             Point sz = Point(_parentWindow.width * 4 / 5, _parentWindow.height * 4 / 5);
@@ -88,8 +89,12 @@ class Dialog : VerticalLayout {
     @property Dialog windowIcon(string iconResourceId) {
         _icon = iconResourceId;
         static if (BACKEND_GUI) {
-            if (_window && _icon)
-                _window.windowIcon = drawableCache.getImage(_icon);
+            if (_window) {
+                if (_icon.length == 0)
+                    _window.windowIcon = drawableCache.getImage(Platform.instance.defaultWindowIcon);
+                else
+                    _window.windowIcon = drawableCache.getImage(_icon);
+            }
         }
         return this;
     }
@@ -120,6 +125,7 @@ class Dialog : VerticalLayout {
     protected ImageTextButton _cancelButton;
     /// create panel with buttons based on list of actions
     Widget createButtonsPanel(const(Action) [] actions, int defaultActionIndex, int splitBeforeIndex) {
+        _defaultButtonIndex = defaultActionIndex;
         _buttonActions = actions;
         LinearLayout res = new HorizontalLayout("buttons");
         res.layoutWidth(FILL_PARENT);
@@ -211,10 +217,7 @@ class Dialog : VerticalLayout {
             if (_initialWidth == 0 && _initialHeight == 0)
                 wflags |= WindowFlag.MeasureSize;
             _window = Platform.instance.createWindow(_caption, _parentWindow, wflags, _initialWidth, _initialHeight);
-            static if (BACKEND_GUI) {
-                if (_window && _icon)
-                    _window.windowIcon = drawableCache.getImage(_icon);
-            }
+            windowIcon = _icon;
             _window.backgroundColor = currentTheme.customColor("dialog_background");
             _window.mainWidget = this;
             _window.show();
@@ -227,6 +230,41 @@ class Dialog : VerticalLayout {
         // override to do something useful
         if (_defaultButton)
             _defaultButton.setFocus();
+    }
+
+    /// calls close with default action; returns true if default action is found and invoked
+    protected bool closeWithDefaultAction() {
+        if (_defaultButtonIndex >= 0 && _defaultButtonIndex < _buttonActions.length) {
+            close(_buttonActions[_defaultButtonIndex]);
+            return true;
+        }
+        return false;
+    }
+
+    /// calls close with cancel action (if found); returns true if cancel action is found and invoked
+    protected bool closeWithCancelAction() {
+        for (int i = 0; i < _buttonActions.length; i++) {
+            if (_buttonActions[i].id == StandardAction.Cancel || _buttonActions[i].id == StandardAction.No) {
+                close(_buttonActions[_defaultButtonIndex]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// pass key event here; returns true if search text is updated and you can move selection using it
+    override bool onKeyEvent(KeyEvent event) {
+        if (event.action == KeyAction.KeyUp) {
+            if (event.keyCode == KeyCode.RETURN && event.modifiers == KeyFlag.Control) {
+                // Ctrl+Enter: default action
+                return closeWithDefaultAction();
+            }
+            if (event.keyCode == KeyCode.ESCAPE && event.noModifiers) {
+                // ESC: cancel/no action
+                return closeWithCancelAction();
+            }
+        }
+        return super.onKeyEvent(event);
     }
 }
 

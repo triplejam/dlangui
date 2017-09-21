@@ -10,6 +10,8 @@
     <color id="editor_matching_bracket_highlight" value="#40606000"/>
     <color id="editor_selection_focused" value="#B080B0FF"/>
     <color id="editor_selection_normal" value="#D080C0FF"/>
+    <color id="editor_search_highlight_current" value="#800000FF"/>
+    <color id="editor_search_highlight_other" value="#C00000FF"/>
     <color id="editor_left_pane_background" value="#030305"/>
     <color id="editor_left_pane_background2" value="#080808"/>
     <color id="editor_left_pane_background3" value="#040404"/>
@@ -77,27 +79,32 @@
     <style id="BUTTON_NOMARGINS"
         backgroundImageId="btn_background_dark"
         />
+    <drawable id="close" value="close_dark"/>
+    <drawable id="tab_more" value="tab_more_dark"/>
     <drawable id="btn_check" value="btn_check_dark"/>
     <drawable id="btn_radio" value="btn_radio_dark"/>
     <drawable id="arrow_right_down_black" value="arrow_right_down_black_dark"/>
     <drawable id="arrow_right_hollow" value="arrow_right_hollow_dark"/>
     <drawable id="toolbar_separator" value="toolbar_separator_dark"/>
 
-    <drawable id="scrollbar_button_up" value="scrollbar_btn_up"/>
-    <drawable id="scrollbar_button_down" value="scrollbar_btn_down"/>
-    <drawable id="scrollbar_button_left" value="scrollbar_btn_left"/>
-    <drawable id="scrollbar_button_right" value="scrollbar_btn_right"/>
-
-    <drawable id="scrollbar_btn_up" value="scrollbar_btn_up_dark"/>
-    <drawable id="scrollbar_btn_down" value="scrollbar_btn_down_dark"/>
-    <drawable id="scrollbar_btn_left" value="scrollbar_btn_left_dark"/>
-    <drawable id="scrollbar_btn_right" value="scrollbar_btn_right_dark"/>
+    <drawable id="scrollbar_button_up" value="scrollbar_btn_up_dark"/>
+    <drawable id="scrollbar_button_down" value="scrollbar_btn_down_dark"/>
+    <drawable id="scrollbar_button_left" value="scrollbar_btn_left_dark"/>
+    <drawable id="scrollbar_button_right" value="scrollbar_btn_right_dark"/>
 
     <drawable id="scrollbar_indicator_vertical" value="scrollbar_indicator_vertical"/>
     <drawable id="scrollbar_indicator_horizontal" value="scrollbar_indicator_horizontal"/>
 
     <style id="SCROLLBAR"
         backgroundColor="#C0808080"
+        />
+    <style id="SCROLLBAR_BUTTON"
+        backgroundImageId="scrollbar_btn_background_dark"
+        align="Center"
+        />
+    <style id="SCROLLBAR_BUTTON_TRANSPARENT"
+        backgroundImageId="scrollbar_btn_transparent_background_dark"
+        align="Center"
         />
     <style id="SLIDER"
         backgroundImageId="slider_background_dark"
@@ -165,6 +172,10 @@
         />
     <style id="MENU_ITEM"
         backgroundImageId="menu_item_background_dark"
+        >
+    </style>
+    <style id="MENU_SEPARATOR"
+        backgroundImageId="menu_separator_dark"
         >
     </style>
     <style id="MENU_ICON"
@@ -253,7 +264,7 @@
     <style id="TOOLBAR_BUTTON"
         backgroundImageId="toolbar_button_background_dark"
         >
-        <state state_enabled="false" alpha="160" backgroundImageId="@null"/>
+        <state state_enabled="false" alpha="160" backgroundImageId="toolbar_button_null"/>
     </style>
     <style id="TOOLBAR_CONTROL"
         backgroundImageId="toolbar_control_background_dark"

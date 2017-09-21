@@ -137,9 +137,15 @@ class TreeItem {
     @property bool isRoot() {
         return false;
     }
-    
+
     void clear() {
+        foreach(c; _children) {
+            c.parent = null;
+            if(c is root.selectedItem)
+                root.selectItem(null);
+        }
         _children.clear();
+        root.onUpdate(this);
     }
 
     @property TreeItem parent() { return _parent; }
@@ -149,11 +155,11 @@ class TreeItem {
     @property string iconRes() { return _iconRes; }
     @property TreeItem iconRes(string res) { _iconRes = res; return this; }
     @property int level() { return _level; }
-    @property protected TreeItem level(int level) { 
+    @property protected TreeItem level(int level) {
         _level = level;
         for (int i = 0; i < childCount; i++)
             child(i).level = _level + 1;
-        return this; 
+        return this;
     }
     @property bool expanded() { return _expanded; }
     @property protected TreeItem expanded(bool expanded) { _expanded = expanded; return this; }
@@ -179,6 +185,24 @@ class TreeItem {
     void collapse() {
         _expanded = false;
     }
+    /// expand this node and all children
+    void expandAll() {
+        foreach(c; _children) {
+            if (!c._expanded && c.canCollapse) //?
+                c.expandAll();
+        }
+        if (!expanded)
+            toggleExpand(this);
+    }
+    /// expand this node and all children
+    void collapseAll() {
+        foreach(c; _children) {
+            if (c._expanded && c.canCollapse)
+                c.collapseAll();
+        }
+        if (expanded)
+            toggleExpand(this);
+    }
 
     @property TreeItem selectedItem() {
         return root.selectedItem();
@@ -200,17 +224,17 @@ class TreeItem {
     @property dstring text() { return _text; }
     /// set text to show
     @property TreeItem text(dstring s) {
-        _text = s; 
+        _text = s;
         return this;
     }
     /// set text to show
-    @property TreeItem text(UIString s) { 
+    @property TreeItem text(UIString s) {
         _text = s;
         return this;
     }
     /// set text resource ID to show
     @property TreeItem textResource(string s) {
-        _text = s; 
+        _text = s;
         return this;
     }
 
@@ -253,32 +277,50 @@ class TreeItem {
     /// returns child by index
     TreeItem child(int index) { return _children.get(index); }
     /// adds child, returns added item
-    TreeItem addChild(TreeItem item) { 
-        return _children.add(item).parent(this).level(_level + 1);
+    TreeItem addChild(TreeItem item, int index = -1) {
+        TreeItem res = _children.insert(item, index).parent(this).level(_level + 1);
+        root.onUpdate(res);
+        return res;
     }
     /// removes child, returns removed item
-    TreeItem removeChild(int index) { 
+    TreeItem removeChild(int index) {
+        if (index < 0 || index >= _children.count)
+            return null;
         TreeItem res = _children.remove(index);
-        if (res !is null)
+        TreeItem newSelection = null;
+        if (res !is null) {
             res.parent = null;
+            if (root && root.selectedItem is res) {
+                if (index < _children.count)
+                    newSelection = _children[index];
+                else if (index > 0)
+                    newSelection = _children[index - 1];
+                else
+                    newSelection = this;
+            }
+        }
+        root.selectItem(newSelection);
+        root.onUpdate(this);
         return res;
+    }
+    /// removes child by reference, returns removed item
+    TreeItem removeChild(TreeItem child) {
+        TreeItem res = null;
+        int index = _children.indexOf(child);
+        return removeChild(index);
     }
     /// removes child by ID, returns removed item
     TreeItem removeChild(string ID) {
         TreeItem res = null;
         int index = _children.indexOf(ID);
-        if (index < 0)
-            return null;
-        res = _children.remove(index); 
-        if (res !is null)
-            res.parent = null;
-        return res;
+        return removeChild(index);
     }
     /// returns index of widget in child list, -1 if passed widget is not a child of this widget
     int childIndex(TreeItem item) { return _children.indexOf(item); }
     /// notify listeners
     protected void onUpdate(TreeItem item) {
-        root.onUpdate(item);
+        if (root)
+            root.onUpdate(item);
     }
     protected void toggleExpand(TreeItem item) {
         root.toggleExpand(item);
@@ -337,6 +379,10 @@ interface OnTreeStateChangeListener {
     void onTreeStateChange(TreeItems source);
 }
 
+interface OnTreeExpandedStateListener {
+    void onTreeExpandedStateChange(TreeItems source, TreeItem item);
+}
+
 interface OnTreeSelectionChangeListener {
     void onTreeItemSelected(TreeItems source, TreeItem selectedItem, bool activated);
 }
@@ -346,6 +392,7 @@ class TreeItems : TreeItem {
     Listener!OnTreeContentChangeListener contentListener;
     Listener!OnTreeStateChangeListener stateListener;
     Listener!OnTreeSelectionChangeListener selectionListener;
+    Listener!OnTreeExpandedStateListener expandListener;
 
     protected bool _noCollapseForSingleTopLevelItem;
     @property bool noCollapseForSingleTopLevelItem() { return _noCollapseForSingleTopLevelItem; }
@@ -362,7 +409,7 @@ class TreeItems : TreeItem {
     override @property bool isRoot() {
         return true;
     }
-    
+
     /// notify listeners
     override protected void onUpdate(TreeItem item) {
         if (contentListener.assigned)
@@ -390,13 +437,20 @@ class TreeItems : TreeItem {
     }
 
     override void toggleExpand(TreeItem item) {
+        bool expandChanged = false;
         if (item.expanded) {
-            if (item.canCollapse())
+            if (item.canCollapse()) {
                 item.collapse();
-        } else
+                expandChanged = true;
+            }
+        } else {
             item.expand();
+            expandChanged = true;
+        }
         if (stateListener.assigned)
             stateListener(this);
+        if (expandChanged && expandListener.assigned)
+            expandListener(this, item);
     }
 
     override void selectItem(TreeItem item) {
@@ -499,13 +553,13 @@ enum TreeActions : int {
     /// move cursor one page down with selection
     SelectPageDown,
     /// move cursor to the beginning of page
-    PageBegin, 
+    PageBegin,
     /// move cursor to the beginning of page with selection
-    SelectPageBegin, 
+    SelectPageBegin,
     /// move cursor to the end of page
-    PageEnd,   
+    PageEnd,
     /// move cursor to the end of page with selection
-    SelectPageEnd,   
+    SelectPageEnd,
     /// move cursor to the beginning of line
     LineBegin,
     /// move cursor to the beginning of line with selection
@@ -566,7 +620,7 @@ class TreeItemWidget : HorizontalLayout {
             level--;
         if (level < 0)
             level = 0;
-        int w = level * style.font.size * 2;
+        int w = level * style.font.size * 3 / 4;
         _tab.minWidth = w;
         _tab.maxWidth = w;
         if (_item.canCollapse()) {
@@ -603,12 +657,12 @@ class TreeItemWidget : HorizontalLayout {
             _icon = new ImageWidget("icon", _item.iconRes);
             _icon.styleId = STYLE_TREE_ITEM_ICON;
             _icon.setState(State.Parent);
+            _icon.padding(Rect(0, 0, BACKEND_GUI ? 5 : 0, 0));
             _body.addChild(_icon);
         }
         _label = new TextWidget("label", _item.text);
         _label.styleId = STYLE_TREE_ITEM_LABEL;
         _label.setState(State.Parent);
-        _label.padding(Rect(BACKEND_GUI ? 5 : 0, 0, 0, 0));
         _body.addChild(_label);
         // append children
         addChild(_tab);
@@ -677,13 +731,14 @@ class TreeItemWidget : HorizontalLayout {
 
 
 /// Abstract tree widget
-class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateChangeListener, OnTreeSelectionChangeListener, OnKeyHandler {
+class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateChangeListener, OnTreeSelectionChangeListener, OnTreeExpandedStateListener, OnKeyHandler {
 
     protected TreeItems _tree;
 
     @property ref TreeItems items() { return _tree; }
 
     Signal!OnTreeSelectionChangeListener selectionChange;
+    Signal!OnTreeExpandedStateListener expandedChange;
     /// allows to provide individual popup menu for items
     Listener!OnTreePopupMenuListener popupMenu;
 
@@ -694,7 +749,7 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
     @property bool noCollapseForSingleTopLevelItem() {
         return _noCollapseForSingleTopLevelItem;
     }
-    @property TreeWidgetBase noCollapseForSingleTopLevelItem(bool flg) { 
+    @property TreeWidgetBase noCollapseForSingleTopLevelItem(bool flg) {
         _noCollapseForSingleTopLevelItem = flg;
         if (_tree)
             _tree.noCollapseForSingleTopLevelItem = flg;
@@ -719,6 +774,8 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
         _tree.contentListener = this;
         _tree.stateListener = this;
         _tree.selectionListener = this;
+        _tree.expandListener = this;
+
         _needUpdateWidgets = true;
         _needUpdateWidgetStates = true;
         acceleratorMap.add( [
@@ -814,11 +871,22 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
     }
 
     override Point minimumVisibleContentSize() {
-        return Point(200,200);
+        return Point(100.pointsToPixels, 100.pointsToPixels);
+    }
+
+    /// calculate full content size in pixels
+    override Point fullContentSize() {
+        if (_needUpdateWidgets)
+            updateWidgets();
+        if (_needUpdateWidgetStates)
+            updateWidgetStates();
+        return super.fullContentSize();
+        //_contentWidget.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
+        //return Point(_contentWidget.measuredWidth,_contentWidget.measuredHeight);
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone) {
             return;
         }
@@ -833,11 +901,21 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
     override void onTreeContentChange(TreeItems source) {
         _needUpdateWidgets = true;
         requestLayout();
+        //updateScrollBars();
     }
 
     override void onTreeStateChange(TreeItems source) {
         _needUpdateWidgetStates = true;
         requestLayout();
+        //updateScrollBars();
+    }
+
+    override void onTreeExpandedStateChange(TreeItems source, TreeItem item) {
+        if (expandedChange.assigned)
+            expandedChange(source, item);
+        layout(pos);
+        //requestLayout();
+        //updateScrollBars();
     }
 
     TreeItemWidget findItemWidget(TreeItem item) {
@@ -941,7 +1019,7 @@ class TreeWidget :  TreeWidgetBase {
         this(null);
     }
     /// create with ID parameter
-    this(string ID) {
-        super(ID);
+    this(string ID, ScrollBarMode hscrollbarMode = ScrollBarMode.Visible, ScrollBarMode vscrollbarMode = ScrollBarMode.Visible) {
+        super(ID, hscrollbarMode, vscrollbarMode);
     }
 }

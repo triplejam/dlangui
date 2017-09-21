@@ -148,7 +148,7 @@ static if (BACKEND_GUI) {
         @property override DrawableRef backgroundDrawable() const {
             return (cast(SampleAnimationWidget)this).drawableRef;
         }
-    
+
         /// returns true is widget is being animated - need to call animate() and redraw
         @property override bool animating() { return true; }
         /// animates window; interval is time left from previous draw, in hnsecs (1/10000000 of second)
@@ -165,14 +165,14 @@ Widget createEditorSettingsControl(EditWidgetBase editor) {
     res.addChild((new CheckBox("useSpacesForTabs", "useSpacesForTabs"d)).checked(editor.useSpacesForTabs).addOnCheckChangeListener(delegate(Widget, bool checked) { editor.useSpacesForTabs = checked; return true;}));
     res.addChild((new CheckBox("readOnly", "readOnly"d)).checked(editor.readOnly).addOnCheckChangeListener(delegate(Widget, bool checked) { editor.readOnly = checked; return true;}));
     res.addChild((new CheckBox("showLineNumbers", "showLineNumbers"d)).checked(editor.showLineNumbers).addOnCheckChangeListener(delegate(Widget, bool checked) { editor.showLineNumbers = checked; return true;}));
-    res.addChild((new CheckBox("fixedFont", "fixedFont"d)).checked(editor.fontFamily == FontFamily.MonoSpace).addOnCheckChangeListener(delegate(Widget, bool checked) { 
+    res.addChild((new CheckBox("fixedFont", "fixedFont"d)).checked(editor.fontFamily == FontFamily.MonoSpace).addOnCheckChangeListener(delegate(Widget, bool checked) {
         if (checked)
             editor.fontFamily(FontFamily.MonoSpace).fontFace("Courier New");
         else
             editor.fontFamily(FontFamily.SansSerif).fontFace("Arial");
         return true;
     }));
-    res.addChild((new CheckBox("tabSize", "Tab size 8"d)).checked(editor.tabSize == 8).addOnCheckChangeListener(delegate(Widget, bool checked) { 
+    res.addChild((new CheckBox("tabSize", "Tab size 8"d)).checked(editor.tabSize == 8).addOnCheckChangeListener(delegate(Widget, bool checked) {
         if (checked)
             editor.tabSize(8);
         else
@@ -580,7 +580,7 @@ extern (C) int UIAppMain(string[] args) {
             gbgrid.addChild(grid);
             line4.addChild(gbgrid);
 
-            GroupBox gbtree = new GroupBox("tree", "TreeWidget"d, Orientation.Horizontal);
+            GroupBox gbtree = new GroupBox("tree", "TreeWidget"d, Orientation.Vertical);
             auto tree = new TreeWidget("gbtree");
             //tree.layoutWidth(WRAP_CONTENT).layoutHeight(FILL_PARENT);
             tree.maxHeight(200.pointsToPixels);
@@ -606,6 +606,38 @@ extern (C) int UIAppMain(string[] args) {
             tree3.newChild("g3_5", "Group 3 item 5"d);
             tree3.newChild("g3_6", "Group 3 item 6"d);
             gbtree.addChild(tree);
+            tree.items.selectItem(tree1);
+            // test adding new tree items
+            HorizontalLayout newTreeItem = new HorizontalLayout();
+            newTreeItem.layoutWidth = FILL_PARENT;
+            EditLine edNewTreeItem = new EditLine("newTreeItem", "new item"d);
+            edNewTreeItem.layoutWidth = FILL_PARENT;
+            Button btnAddItem = new Button("btnAddTreeItem", "Add"d);
+            Button btnRemoveItem = new Button("btnRemoveTreeItem", "Remove"d);
+            newTreeItem.addChild(edNewTreeItem);
+            newTreeItem.addChild(btnAddItem);
+            newTreeItem.addChild(btnRemoveItem);
+            btnAddItem.click = delegate(Widget source) {
+                import std.random;
+                dstring label = edNewTreeItem.text;
+                string id = "item%d".format(uniform(1000000, 9999999, rndGen));
+                TreeItem item = tree.items.selectedItem;
+                if (item) {
+                    Log.d("Creating new tree item ", id, " ", label);
+                    TreeItem newItem = new TreeItem(id, label);
+                    item.addChild(newItem);
+                }
+                return true;
+            };
+            btnRemoveItem.click = delegate(Widget source) {
+                TreeItem item = tree.items.selectedItem;
+                if (item) {
+                    Log.d("Removing tree item ", item.id, " ", item.text);
+                    item.parent.removeChild(item);
+                }
+                return true;
+            };
+            gbtree.addChild(newTreeItem);
             line4.addChild(gbtree);
 
             controls.addChild(line4);
@@ -622,9 +654,9 @@ extern (C) int UIAppMain(string[] args) {
         layout.addChild(new ProgressBarWidget().progress(-1).animationInterval(50));
         layout.addChild((new Button("BTN1")).textResource("EXIT")); //.textColor(0x40FF4000)
         layout.addChild(new TimerTest());
-        
+
         static if (true) {
-        
+
 
         LinearLayout hlayout = new HorizontalLayout();
         hlayout.layoutWidth(FILL_PARENT);
@@ -667,15 +699,15 @@ extern (C) int UIAppMain(string[] args) {
         layout.addChild((new TextWidget(null, "Text widget3 with very long text"d)).textColor(0x004000));
         layout.addChild(new VSpacer()); // vertical spacer to fill extra space
 
-        
+
         Widget w = parseML(q{
             VerticalLayout {
                 id: vlayout
                 margins: Rect { left: 5; right: 3; top: 2; bottom: 4 }
                 padding: Rect { 5, 4, 3, 2 } // same as Rect { left: 5; top: 4; right: 3; bottom: 2 }
                 TextWidget {
-                    /* this widget can be accessed via id myLabel1 
-                    e.g. w.childById!TextWidget("myLabel1") 
+                    /* this widget can be accessed via id myLabel1
+                    e.g. w.childById!TextWidget("myLabel1")
                     */
                     id: myLabel1
                     text: "Some text"; padding: 5
@@ -688,20 +720,20 @@ extern (C) int UIAppMain(string[] args) {
                 }
             }
         });
-        Log.d("id=", w.id, " text=", w.text, " padding=", w.padding, " margins=", w.margins, 
-              " lbl1.text=", w.childById!TextWidget("myLabel1").text, 
-              " lbl1.enabled=", w.childById!TextWidget("myLabel1").enabled, 
+        Log.d("id=", w.id, " text=", w.text, " padding=", w.padding, " margins=", w.margins,
+              " lbl1.text=", w.childById!TextWidget("myLabel1").text,
+              " lbl1.enabled=", w.childById!TextWidget("myLabel1").enabled,
               " lbl2.text=", w.childById!TextWidget("myLabel2").text
               );
         destroy(w);
 
-        layout.childById("BTN1").click = delegate (Widget w) { 
+        layout.childById("BTN1").click = delegate (Widget w) {
             Log.d("onClick ", w.id);
             //w.backgroundImageId = null;
             //w.backgroundColor = 0xFF00FF;
             w.textColor = 0xFF00FF;
             w.styleId = STYLE_BUTTON_NOMARGINS;
-            return true; 
+            return true;
         };
         layout.childById("BTN2").click = delegate (Widget w) { Log.d("onClick ", w.id); return true; };
         layout.childById("BTN3").click = delegate (Widget w) { Log.d("onClick ", w.id); return true; };
@@ -726,6 +758,10 @@ extern (C) int UIAppMain(string[] args) {
             WidgetListAdapter listAdapter = new WidgetListAdapter();
             listAdapter.add((new TextWidget()).text("This is a list of widgets"d).styleId("LIST_ITEM"));
             stringList.add("This is a list of strings from StringListAdapter"d);
+            stringList.add("If you type with your keyboard,"d);
+            stringList.add("then you can find the"d);
+            stringList.add("item in the list"d);
+            stringList.add("neat!"d);
             for (int i = 1; i < 1000; i++) {
                 dstring label = "List item "d ~ to!dstring(i);
                 listAdapter.add((new TextWidget()).text("Widget list - "d ~ label).styleId("LIST_ITEM"));
@@ -743,7 +779,7 @@ extern (C) int UIAppMain(string[] args) {
 
             longLists.addChild(list);
 
-            ListWidget list2 = new ListWidget("list2");
+            ListWidget list2 = new StringListWidget("list2");
             list2.ownAdapter = stringList;
             list2.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
             list2.selectItem(0);
@@ -965,7 +1001,15 @@ void main()
 
         //==========================================================================
 
+        VerticalLayout gridContent = new VerticalLayout("GRID_CONTENT");
+        gridContent.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
+        HorizontalLayout gridSettings = new HorizontalLayout();
         StringGridWidget grid = new StringGridWidget("GRID1");
+
+        gridSettings.addChild((new CheckBox("fullColumnOnLeft", "fullColumnOnLeft"d)).checked(grid.fullColumnOnLeft).tooltipText("Extends scroll area to show full column at left when scrolled to rightmost column"d).addOnCheckChangeListener(delegate(Widget, bool checked) { grid.fullColumnOnLeft = checked; return true;}));
+        gridSettings.addChild((new CheckBox("fullRowOnTop", "fullRowOnTop"d)).checked(grid.fullRowOnTop).tooltipText("Extends scroll area to show full row at top when scrolled to end row"d).addOnCheckChangeListener(delegate(Widget, bool checked) { grid.fullRowOnTop = checked; return true;}));
+        gridContent.addChild(gridSettings);
+
         grid.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
         grid.showColHeaders = true;
         grid.showRowHeaders = true;
@@ -993,7 +1037,8 @@ void main()
             grid.setColTitle(x, res);
         }
         grid.autoFit();
-        tabs.addTab(grid, "Grid"d);
+        gridContent.addChild(grid);
+        tabs.addTab(gridContent, "Grid"d);
 
         //==========================================================================
         // Scroll view example
@@ -1101,7 +1146,7 @@ void main()
         barChart1.addBar(12.0, makeRGBA(230,126,34,0), "Orange bar"d);
         //barChart1.layoutWidth = FILL_PARENT;
         //barChart1.layoutHeight = FILL_PARENT;
-        
+
         SimpleBarChart barChart2 = new SimpleBarChart("barChart2","SimpleBarChart Example - long descriptions"d);
         barChart2.addBar(12.0, makeRGBA(255,0,0,0), "Red bar\n(12.0)"d);
         barChart2.addBar(24.0, makeRGBA(0,255,0,0), "Green bar\n(24.0)"d);
@@ -1114,21 +1159,21 @@ void main()
         barChart3.addBar(5.0, makeRGBA(0,0,255,0), "Blue bar"d);
         barChart3.addBar(12.0, makeRGBA(230,126,34,0), "Orange bar"d);
         barChart3.axisRatio = 0.3;
-        
+
         SimpleBarChart barChart4 = new SimpleBarChart("barChart4","SimpleBarChart Example with axis ratio 1.3"d);
         barChart4.addBar(12.0, makeRGBA(255,0,0,0), "Red bar"d);
         barChart4.addBar(24.0, makeRGBA(0,255,0,0), "Green bar"d);
         barChart4.addBar(5.0, makeRGBA(0,0,255,0), "Blue bar"d);
         barChart4.addBar(12.0, makeRGBA(230,126,34,0), "Orange bar"d);
         barChart4.axisRatio = 1.3;
-                
+
         HorizontalLayout chartsLayout = new HorizontalLayout("CHARTS");
         chartsLayout.layoutWidth = FILL_PARENT;
         chartsLayout.layoutHeight = FILL_PARENT;
-        
+
         VerticalLayout chartColumn1 = new VerticalLayout();
         VerticalLayout chartColumn2 = new VerticalLayout();
-        
+
         chartColumn1.addChild(barChart1);
         chartColumn1.addChild(barChart2);
         chartsLayout.addChild(chartColumn1);
@@ -1136,9 +1181,9 @@ void main()
         chartColumn2.addChild(barChart4);
         chartsLayout.addChild(chartColumn2);
         tabs.addTab(chartsLayout, "Charts"d);
-        
+
         static if (BACKEND_GUI) {
-         
+
             tabs.addTab((new SampleAnimationWidget("tab6")).layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT), "TAB_ANIMATION"c);
 
             CanvasWidget canvas = new CanvasWidget("canvas");
@@ -1172,7 +1217,7 @@ void main()
                 //buf.fillTriangleF(vec2(x+80, y+150), vec2(x+280, y+250), vec2(x+80, y+200), 0xC0008080);
                 //buf.clipRect = oldClip;
                 canvas.font.drawText(buf, x + 190, y + 260, "polyLineF()"d, 0x603010);
-                PointF[] poly2 = [vec2(x+430, y+250), vec2(x+540, y+180), vec2(x+470, y+270), vec2(x+580, y+300), 
+                PointF[] poly2 = [vec2(x+430, y+250), vec2(x+540, y+180), vec2(x+470, y+270), vec2(x+580, y+300),
                     vec2(x+620, y+400), vec2(x+480, y+350), vec2(x+520, y+450), vec2(x+480, y+430)];
                 buf.fillPolyF(poly2, 0x80203050);
                 //buf.polyLineF(poly2, 2.0f, 0x80000000, true);
@@ -1339,12 +1384,12 @@ static if (ENABLE_OPENGL) {
     static __gshared GLint gear1, gear2, gear3;
     static __gshared GLfloat angle = 0.0;
     alias M_PI = std.math.PI;
-    
+
     /*
  *
  *  Draw a gear wheel.  You'll probably want to call this function when
  *  building a display list since we do a lot of trig here.
- * 
+ *
  *  Input:  inner_radius - radius of hole at center
  *          outer_radius - radius at center of teeth
  *          width - width of gear
@@ -1359,17 +1404,17 @@ static if (ENABLE_OPENGL) {
         GLfloat r0, r1, r2;
         GLfloat angle, da;
         GLfloat u, v, len;
-        
+
         r0 = inner_radius;
         r1 = outer_radius - tooth_depth / 2.0;
         r2 = outer_radius + tooth_depth / 2.0;
-        
+
         da = 2.0 * M_PI / teeth / 4.0;
-        
+
         glShadeModel(GL_FLAT);
-        
+
         glNormal3f(0.0, 0.0, 1.0);
-        
+
         /* draw front face */
         glBegin(GL_QUAD_STRIP);
         for (i = 0; i <= teeth; i++) {
@@ -1383,13 +1428,13 @@ static if (ENABLE_OPENGL) {
             }
         }
         glEnd();
-        
+
         /* draw front sides of teeth */
         glBegin(GL_QUADS);
         da = 2.0 * M_PI / teeth / 4.0;
         for (i = 0; i < teeth; i++) {
             angle = i * 2.0 * M_PI / teeth;
-            
+
             glVertex3f(r1 * cos(angle), r1 * sin(angle), width * 0.5);
             glVertex3f(r2 * cos(angle + da), r2 * sin(angle + da), width * 0.5);
             glVertex3f(r2 * cos(angle + 2 * da), r2 * sin(angle + 2 * da),
@@ -1398,9 +1443,9 @@ static if (ENABLE_OPENGL) {
                 width * 0.5);
         }
         glEnd();
-        
+
         glNormal3f(0.0, 0.0, -1.0);
-        
+
         /* draw back face */
         glBegin(GL_QUAD_STRIP);
         for (i = 0; i <= teeth; i++) {
@@ -1414,13 +1459,13 @@ static if (ENABLE_OPENGL) {
             }
         }
         glEnd();
-        
+
         /* draw back sides of teeth */
         glBegin(GL_QUADS);
         da = 2.0 * M_PI / teeth / 4.0;
         for (i = 0; i < teeth; i++) {
             angle = i * 2.0 * M_PI / teeth;
-            
+
             glVertex3f(r1 * cos(angle + 3 * da), r1 * sin(angle + 3 * da),
                 -width * 0.5);
             glVertex3f(r2 * cos(angle + 2 * da), r2 * sin(angle + 2 * da),
@@ -1429,12 +1474,12 @@ static if (ENABLE_OPENGL) {
             glVertex3f(r1 * cos(angle), r1 * sin(angle), -width * 0.5);
         }
         glEnd();
-        
+
         /* draw outward faces of teeth */
         glBegin(GL_QUAD_STRIP);
         for (i = 0; i < teeth; i++) {
             angle = i * 2.0 * M_PI / teeth;
-            
+
             glVertex3f(r1 * cos(angle), r1 * sin(angle), width * 0.5);
             glVertex3f(r1 * cos(angle), r1 * sin(angle), -width * 0.5);
             u = r2 * cos(angle + da) - r1 * cos(angle);
@@ -1459,14 +1504,14 @@ static if (ENABLE_OPENGL) {
                 -width * 0.5);
             glNormal3f(cos(angle), sin(angle), 0.0);
         }
-        
+
         glVertex3f(r1 * cos(0.0), r1 * sin(0.0), width * 0.5);
         glVertex3f(r1 * cos(0.0), r1 * sin(0.0), -width * 0.5);
-        
+
         glEnd();
-        
+
         glShadeModel(GL_SMOOTH);
-        
+
         /* draw inside radius cylinder */
         glBegin(GL_QUAD_STRIP);
         for (i = 0; i <= teeth; i++) {
@@ -1477,39 +1522,39 @@ static if (ENABLE_OPENGL) {
         }
         glEnd();
     }
-    
-    
+
+
     static void glxgears_draw()
     {
         glClear(/*GL_COLOR_BUFFER_BIT | */GL_DEPTH_BUFFER_BIT);
-        
+
         glPushMatrix();
         glRotatef(view_rotx, 1.0, 0.0, 0.0);
         glRotatef(view_roty, 0.0, 1.0, 0.0);
         glRotatef(view_rotz, 0.0, 0.0, 1.0);
-        
+
         glPushMatrix();
         glTranslatef(-3.0, -2.0, 0.0);
         glRotatef(angle, 0.0, 0.0, 1.0);
         glCallList(gear1);
         glPopMatrix();
-        
+
         glPushMatrix();
         glTranslatef(3.1, -2.0, 0.0);
         glRotatef(-2.0 * angle - 9.0, 0.0, 0.0, 1.0);
         glCallList(gear2);
         glPopMatrix();
-        
+
         glPushMatrix();
         glTranslatef(-3.1, 4.2, 0.0);
         glRotatef(-2.0 * angle - 25.0, 0.0, 0.0, 1.0);
         glCallList(gear3);
         glPopMatrix();
-        
+
         glPopMatrix();
     }
-    
-    
+
+
     /* new window size or exposure */
     static void
         glxgears_reshape(Rect rc)
@@ -1522,40 +1567,40 @@ static if (ENABLE_OPENGL) {
         glLoadIdentity();
         glTranslatef(0.0, 0.0, -40.0);
     }
-    
-    
+
+
     static void glxgears_init()
     {
         static GLfloat[4] pos = [ 5.0, 5.0, 10.0, 0.0 ];
         static GLfloat[4] red = [ 0.8, 0.1, 0.0, 1.0 ];
         static GLfloat[4] green = [ 0.0, 0.8, 0.2, 1.0 ];
         static GLfloat[4] blue = [ 0.2, 0.2, 1.0, 1.0 ];
-        
+
         glLightfv(GL_LIGHT0, GL_POSITION, pos.ptr);
         glEnable(GL_CULL_FACE);
         glEnable(GL_LIGHTING);
         glEnable(GL_LIGHT0);
         glEnable(GL_DEPTH_TEST);
-        
+
         /* make the gears */
         gear1 = glGenLists(1);
         glNewList(gear1, GL_COMPILE);
         glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, red.ptr);
         gear(1.0, 4.0, 1.0, 20, 0.7);
         glEndList();
-        
+
         gear2 = glGenLists(1);
         glNewList(gear2, GL_COMPILE);
         glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, green.ptr);
         gear(0.5, 2.0, 2.0, 10, 0.7);
         glEndList();
-        
+
         gear3 = glGenLists(1);
         glNewList(gear3, GL_COMPILE);
         glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, blue.ptr);
         gear(1.3, 2.0, 0.5, 10, 0.7);
         glEndList();
-        
+
         glEnable(GL_NORMALIZE);
     }
 

@@ -16,20 +16,17 @@
     "importPaths": [
         "3rdparty", "src"
     ],
+
+    "libs-linux": ["z"],
  
     "stringImportPaths": [
-        "views",
-        "views/res",
-        "views/res/mdpi",
-        "views/res/hdpi",
-        "views/res/shaders",
-        "views/res/i18n"
+        "views"
     ],
 
     "-ddoxFilterArgs": ["--unittest-examples", "--min-protection=Protected", "--ex", "win32.",
         "--ex", "dimage.", "--ex", "fontconfig", "--ex", "src.dlangui"],
 
-    "sourceFiles-windows": ["$PACKAGE_DIR/src/win_app.def"],
+    "sourceFiles-windows-x86-dmd": ["$PACKAGE_DIR/src/win_app.def"],
     "excludedSourceFiles-windows": ["3rdparty/fontconfig/*"],
 
     "subPackages": [
@@ -70,6 +67,11 @@
             "excludedSourceFiles": ["3rdparty/*"]
         },
         {
+            "name": "external",
+            "versions": ["USE_EXTERNAL"],
+            "excludedSourceFiles": ["3rdparty/*"]
+        },
+        {
             "name": "minimal",
             "versions": ["EmbedStandardResources", "ForceLogs"],
             "versions-posix": ["USE_SDL", "USE_FREETYPE", "NO_OPENGL"],
@@ -105,7 +107,7 @@
             "dependencies": {
                 "derelict-gl3": "~>1.0.18",
                 "derelict-ft": "~>1.1.2",
-                "x11": "~>1.0.13"
+                "x11": "~>1.0.17"
             }
         },
         {

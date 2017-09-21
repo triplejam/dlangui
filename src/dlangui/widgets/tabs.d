@@ -23,8 +23,11 @@ Authors:   Vadim Lopatin, coolreader.org@gmail.com
 module dlangui.widgets.tabs;
 
 import dlangui.core.signals;
+import dlangui.core.stdaction;
 import dlangui.widgets.layouts;
 import dlangui.widgets.controls;
+import dlangui.widgets.menu;
+import dlangui.widgets.popup;
 
 import std.algorithm;
 
@@ -38,6 +41,9 @@ interface TabCloseHandler {
     void onTabClose(string tabId);
 }
 
+interface PopupMenuHandler {
+    MenuItem getPopupMenu(Widget source);
+}
 
 /// tab item metadata
 class TabItem {
@@ -45,17 +51,27 @@ class TabItem {
     private string _iconRes;
     private string _id;
     private UIString _label;
+    private UIString _tooltipText;
     private long _lastAccessTs;
-    this(string id, string labelRes, string iconRes = null) {
+    this(string id, string labelRes, string iconRes = null, dstring tooltipText = null) {
         _id = id;
         _label.id = labelRes;
         _iconRes = iconRes;
+        _tooltipText = UIString.fromRaw(tooltipText);
     }
-    this(string id, dstring labelRes, string iconRes = null) {
+    this(string id, dstring labelText, string iconRes = null, dstring tooltipText = null) {
         _id = id;
-        _label.value = labelRes;
+        _label.value = labelText;
         _iconRes = iconRes;
         _lastAccessTs = _lastAccessCounter++;
+        _tooltipText = UIString.fromRaw(tooltipText);
+    }
+    this(string id, UIString labelText, string iconRes = null, dstring tooltipText = null) {
+        _id = id;
+        _label = labelText;
+        _iconRes = iconRes;
+        _lastAccessTs = _lastAccessCounter++;
+        _tooltipText = UIString.fromRaw(tooltipText);
     }
     @property string iconId() const { return _iconRes; }
     @property string id() const { return _id; }
@@ -67,6 +83,16 @@ class TabItem {
     void updateAccessTs() {
         _lastAccessTs = _lastAccessCounter++; //std.datetime.Clock.currStdTime;
     }
+    /// tooltip text
+    @property dstring tooltipText() {
+        if (_tooltipText.empty)
+            return null;
+        return _tooltipText.value;
+    }
+    /// tooltip text
+    @property void tooltipText(dstring text) { _tooltipText = UIString.fromRaw(text); }
+    /// tooltip text
+    @property void tooltipText(UIString text) { _tooltipText = text; }
 
     protected Object _objectParam;
     @property Object objectParam() {
@@ -121,7 +147,35 @@ class TabItemWidget : HorizontalLayout {
         clickable = true;
         trackHover = true;
         _label.trackHover = true;
+        _label.tooltipText = _item.tooltipText;
+        if (_icon)
+            _icon.tooltipText = _item.tooltipText;
+        if (_closeButton)
+            _closeButton.tooltipText = _item.tooltipText;
     }
+    /// tooltip text - when not empty, widget will show tooltips automatically; for advanced tooltips - override hasTooltip and createTooltip
+    override @property dstring tooltipText() { return _item.tooltipText; }
+    /// tooltip text - when not empty, widget will show tooltips automatically; for advanced tooltips - override hasTooltip and createTooltip
+    override @property Widget tooltipText(dstring text) { 
+        _label.tooltipText = text;
+        if (_icon)
+            _icon.tooltipText = text;
+        if (_closeButton)
+            _closeButton.tooltipText = text;
+        _item.tooltipText = text;
+        return this; 
+    }
+    /// tooltip text - when not empty, widget will show tooltips automatically; for advanced tooltips - override hasTooltip and createTooltip
+    override @property Widget tooltipText(UIString text) {
+        _label.tooltipText = text;
+        if (_icon)
+            _icon.tooltipText = text;
+        if (_closeButton)
+            _closeButton.tooltipText = text;
+        _item.tooltipText = text;
+        return this;
+    }
+
     void setStyles(string tabButtonStyle, string tabButtonTextStyle) {
         styleId = tabButtonStyle;
         _label.styleId = tabButtonTextStyle;
@@ -240,6 +294,7 @@ class TabControl : WidgetGroupDefaultDrawing {
     protected TabItemList _items;
     protected ImageButton _moreButton;
     protected bool _enableCloseButton;
+    protected bool _autoMoreButtonMenu = true;
     protected TabItemWidget[] _sortedItems;
     protected int _buttonOverlap;
 
@@ -252,6 +307,10 @@ class TabControl : WidgetGroupDefaultDrawing {
 
     /// signal on tab close button
     Signal!TabCloseHandler tabClose;
+    /// on more button click (bool delegate(Widget))
+    Signal!OnClickHandler moreButtonClick;
+    /// handler for more button popup menu
+    Signal!PopupMenuHandler moreButtonPopupMenu;
 
     protected Align _tabAlignment;
     @property Align tabAlignment() { return _tabAlignment; }
@@ -294,6 +353,31 @@ class TabControl : WidgetGroupDefaultDrawing {
     /// ditto
     @property void enableCloseButton(bool enabled) {
         _enableCloseButton = enabled;
+    }
+    /// when true, more button is visible
+    @property bool enableMoreButton() {
+        return _moreButton.visibility == Visibility.Visible;
+    }
+    /// ditto
+    @property void enableMoreButton(bool flgVisible) {
+        _moreButton.visibility = flgVisible ? Visibility.Visible : Visibility.Gone;
+    }
+    /// when true, automatically generate popup menu for more button - allowing to select tab from list
+    @property bool autoMoreButtonMenu() {
+        return _autoMoreButtonMenu;
+    }
+    /// ditto
+    @property void autoMoreButtonMenu(bool enableAutoMenu) {
+        _autoMoreButtonMenu = enableAutoMenu;
+    }
+
+    /// more button custom icon
+    @property string moreButtonIcon() {
+        return _moreButton.drawableId;
+    }
+    /// ditto
+    @property void moreButtonIcon(string resourceId) {
+        _moreButton.drawableId = resourceId;
     }
 
     /// returns tab count
@@ -402,6 +486,20 @@ class TabControl : WidgetGroupDefaultDrawing {
         }
     }
 
+    /// change name and id of tab
+    void renameTab(int index, string id, dstring name) {
+        _items[index].text = name;
+        _items[index].id = id;
+        for (int i = 0; i < _children.count; i++) {
+            TabItemWidget widget = cast (TabItemWidget)_children[i];
+            if (widget && widget.item is _items[index]) {
+                widget.setItem(_items[index]);
+                requestLayout();
+                break;
+            }
+        }
+    }
+
     protected void onTabClose(string tabId) {
         if (tabClose.assigned)
             tabClose(tabId);
@@ -421,19 +519,71 @@ class TabControl : WidgetGroupDefaultDrawing {
         return this;
     }
     /// add new tab by id and label string
-    TabControl addTab(string id, dstring label, string iconId = null, bool enableCloseButton = false) {
-        TabItem item = new TabItem(id, label, iconId);
+    TabControl addTab(string id, dstring label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        TabItem item = new TabItem(id, label, iconId, tooltipText);
         return addTab(item, -1, enableCloseButton);
     }
     /// add new tab by id and label string resource id
-    TabControl addTab(string id, string labelResourceId, string iconId = null, bool enableCloseButton = false) {
-        TabItem item = new TabItem(id, labelResourceId, iconId);
+    TabControl addTab(string id, string labelResourceId, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        TabItem item = new TabItem(id, labelResourceId, iconId, tooltipText);
         return addTab(item, -1, enableCloseButton);
+    }
+    /// add new tab by id and label UIString
+    TabControl addTab(string id, UIString label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        TabItem item = new TabItem(id, label, iconId, tooltipText);
+        return addTab(item, -1, enableCloseButton);
+    }
+    protected MenuItem getMoreButtonPopupMenu() {
+        if (moreButtonPopupMenu.assigned) {
+            if (auto menu = moreButtonPopupMenu(this)) {
+                return menu;
+            }
+        }
+        if (_autoMoreButtonMenu) {
+            if (!tabCount)
+                return null;
+            MenuItem res = new MenuItem();
+            for (int i = 0; i < tabCount; i++) {
+                TabItem item = _items[i];
+                Action action = new Action(StandardAction.TabSelectItem, item.text);
+                action.longParam = i;
+                res.add(action);
+            }
+            return res;
+        }
+        return null;
+    }
+    /// try to invoke popup menu, return true if popup menu is shown
+    protected bool handleMorePopupMenu() {
+        if (auto menu = getMoreButtonPopupMenu()) {
+            PopupMenu popupMenu = new PopupMenu(menu);
+            popupMenu.menuItemAction = &handleAction;
+            //popupMenu.menuItemAction = this;
+            PopupWidget popup = window.showPopup(popupMenu, this, PopupAlign.Point | (_tabAlignment == Align.Top ? PopupAlign.Below : PopupAlign.Above) | PopupAlign.Right, _moreButton.pos.right, _moreButton.pos.bottom);
+            popup.flags = PopupFlags.CloseOnClickOutside;
+            popupMenu.setFocus();
+            popupMenu.selectItem(0);
+            return true;
+        }
+        return false;
+    }
+    /// override to handle specific actions
+    override bool handleAction(const Action a) {
+        if (a.id == StandardAction.TabSelectItem) {
+            selectTab(cast(int)a.longParam, true);
+            return true;
+        }
+        return super.handleAction(a);
     }
     protected bool onMouse(Widget source, MouseEvent event) {
         if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Left) {
             if (source.compareId("MORE")) {
                 Log.d("tab MORE button pressed");
+                if (handleMorePopupMenu())
+                    return true;
+                if (moreButtonClick.assigned) {
+                    moreButtonClick(this);
+                }
                 return true;
             }
             string id = source.id;
@@ -607,8 +757,8 @@ class TabHost : FrameLayout, TabHandler {
     /// get currently set control widget
     @property TabControl tabControl() { return _tabControl; }
     /// set new control widget
-    @property TabHost tabControl(TabControl newWidget) { 
-        _tabControl = newWidget; 
+    @property TabHost tabControl(TabControl newWidget) {
+        _tabControl = newWidget;
         if (_tabControl !is null)
             _tabControl.tabChanged = &onTabChanged;
         return this;
@@ -650,22 +800,33 @@ class TabHost : FrameLayout, TabHandler {
         return this;
     }
     /// add new tab by id and label string
-    TabHost addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false) {
+    TabHost addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
         assert(_tabControl !is null, "No TabControl set for TabHost");
         assert(widget.id !is null, "ID for tab host page is mandatory");
         assert(_children.indexOf(id) == -1, "duplicate ID for tab host page");
-        _tabControl.addTab(widget.id, label, iconId, enableCloseButton);
+        _tabControl.addTab(widget.id, label, iconId, enableCloseButton, tooltipText);
         tabInitialization(widget);
         //widget.focusGroup = true; // doesn't allow move focus outside of tab content
         addChild(widget);
         return this;
     }
     /// add new tab by id and label string resource id
-    TabHost addTab(Widget widget, string labelResourceId, string iconId = null, bool enableCloseButton = false) {
+    TabHost addTab(Widget widget, string labelResourceId, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
         assert(_tabControl !is null, "No TabControl set for TabHost");
         assert(widget.id !is null, "ID for tab host page is mandatory");
         assert(_children.indexOf(id) == -1, "duplicate ID for tab host page");
-        _tabControl.addTab(widget.id, labelResourceId, iconId, enableCloseButton);
+        _tabControl.addTab(widget.id, labelResourceId, iconId, enableCloseButton, tooltipText);
+        tabInitialization(widget);
+        addChild(widget);
+        return this;
+    }
+
+    /// add new tab by id and label UIString
+    TabHost addTab(Widget widget, UIString label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        assert(_tabControl !is null, "No TabControl set for TabHost");
+        assert(widget.id !is null, "ID for tab host page is mandatory");
+        assert(_children.indexOf(id) == -1, "duplicate ID for tab host page");
+        _tabControl.addTab(widget.id, label, iconId, enableCloseButton, tooltipText);
         tabInitialization(widget);
         addChild(widget);
         return this;
@@ -680,7 +841,7 @@ class TabHost : FrameLayout, TabHandler {
             widget.visibility = Visibility.Invisible;
         }
     }
-    
+
     /// select tab
     void selectTab(string ID, bool updateAccess) {
         int index = _tabControl.tabIndex(ID);
@@ -751,14 +912,14 @@ class TabWidget : VerticalLayout, TabHandler, TabCloseHandler {
     }
 
     /// add new tab by id and label string resource id
-    TabWidget addTab(Widget widget, string labelResourceId, string iconId = null, bool enableCloseButton = false) {
-        _tabHost.addTab(widget, labelResourceId, iconId, enableCloseButton);
+    TabWidget addTab(Widget widget, string labelResourceId, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        _tabHost.addTab(widget, labelResourceId, iconId, enableCloseButton, tooltipText);
         return this;
     }
 
     /// add new tab by id and label (raw value)
-    TabWidget addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false) {
-        _tabHost.addTab(widget, label, iconId, enableCloseButton);
+    TabWidget addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
+        _tabHost.addTab(widget, label, iconId, enableCloseButton, tooltipText);
         return this;
     }
 
@@ -777,6 +938,11 @@ class TabWidget : VerticalLayout, TabHandler, TabCloseHandler {
     /// change name of tab
     void renameTab(int index, dstring name) {
         _tabControl.renameTab(index, name);
+    }
+
+    /// change name of tab
+    void renameTab(int index, string id, dstring name) {
+        _tabControl.renameTab(index, id, name);
     }
 
     @property Visibility hiddenTabsVisibility() { return _tabHost.hiddenTabsVisibility; }
@@ -825,6 +991,15 @@ class TabWidget : VerticalLayout, TabHandler, TabCloseHandler {
         styleId = tabWidgetStyle;
         _tabControl.setStyles(tabStyle, tabButtonStyle, tabButtonTextStyle);
         _tabHost.styleId = tabHostStyle;
+    }
+
+    /// override to handle specific actions
+    override bool handleAction(const Action a) {
+        if (a.id == StandardAction.TabSelectItem) {
+            selectTab(cast(int)a.longParam);
+            return true;
+        }
+        return super.handleAction(a);
     }
 
     private bool _tabNavigationInProgress;

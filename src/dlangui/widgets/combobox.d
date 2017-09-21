@@ -78,17 +78,19 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
     }
 
     /// change enabled state
-    override @property Widget enabled(bool flg) { 
+    override @property Widget enabled(bool flg) {
         super.enabled(flg);
         _button.enabled = flg;
-        return this; 
+        return this;
     }
     /// return true if state has State.Enabled flag set
     override @property bool enabled() { return super.enabled; }
 
     override bool onClick(Widget source) {
-        if (enabled)
-            showPopup();
+        if (enabled) {
+            if (!_popup && _lastPopupCloseTimestamp + 200 < currentTimeMillis)
+                showPopup();
+        }
         return true;
     }
 
@@ -121,6 +123,7 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
         _button.layout(rc);
     }
 
+    protected long _lastPopupCloseTimestamp;
     protected void popupClosed() {
     }
 
@@ -132,6 +135,7 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
         _popup.flags = PopupFlags.CloseOnClickOutside;
         _popup.styleId = STYLE_POPUP_MENU;
         _popup.popupClosed = delegate (PopupWidget source) {
+            _lastPopupCloseTimestamp = currentTimeMillis;
             _popup = null;
             _popupList = null;
         };
@@ -202,7 +206,7 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
 
 /** ComboBox with list of strings. */
 class ComboBox : ComboBoxBase {
-    
+
     /// empty parameter list constructor - for usage by factory
     this() {
         this(null);

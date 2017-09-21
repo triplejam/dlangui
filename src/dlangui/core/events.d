@@ -230,11 +230,11 @@ struct ActionState {
     @property bool checked() const { return (_flags & StateFlag.checked) != 0; }
     @property void checked(bool f) { _flags = f ? (_flags | StateFlag.checked) : (_flags & ~StateFlag.checked); }
     this(bool en, bool vis, bool check) {
-        _flags = (en ? StateFlag.enabled : 0) 
-            | (vis ? StateFlag.visible : 0) 
+        _flags = (en ? StateFlag.enabled : 0)
+            | (vis ? StateFlag.visible : 0)
             | (check ? StateFlag.checked : 0);
     }
-    string toString() const { 
+    string toString() const {
         return (enabled ? "enabled" : "disabled") ~ (visible ? "_visible" : "_invisible") ~ (checked ? "_checked" : "");
     }
 }
@@ -242,6 +242,7 @@ struct ActionState {
 const ACTION_STATE_ENABLED = ActionState(true, true, false);
 const ACTION_STATE_DISABLE = ActionState(false, true, false);
 const ACTION_STATE_INVISIBLE = ActionState(false, false, false);
+const ACTION_STATE_CHECKED = ActionState(true, true, true);
 
 /// Match key flags
 static bool matchKeyFlags(uint eventFlags, uint requestedFlags) {
@@ -274,7 +275,7 @@ static bool matchKeyFlags(uint eventFlags, uint requestedFlags) {
     return true;
 }
 
-/** 
+/**
     UI action
 
     For using in menus, toolbars, etc.
@@ -319,7 +320,7 @@ class Action {
             Action nonConstThis = cast(Action) this;
             nonConstThis._state = s;
         }
-        return this; 
+        return this;
     }
     @property const(Action) checked(bool newValue) const {
         state = ActionState(_state.enabled, _state.visible, newValue);
@@ -643,22 +644,22 @@ struct ActionList {
 /// Mouse action codes for MouseEvent
 enum MouseAction : ubyte {
     /// button down handling is cancelled
-    Cancel,   
+    Cancel,
     /// button is down
-    ButtonDown, 
+    ButtonDown,
     /// button is up
-    ButtonUp, 
+    ButtonUp,
     /// mouse pointer is moving
-    Move,     
+    Move,
     /// pointer is back inside widget while button is down after FocusOut
-    FocusIn,  
+    FocusIn,
     /// pointer moved outside of widget while button was down (if handler returns true, Move events will be sent even while pointer is outside widget)
-    FocusOut, 
+    FocusOut,
     /// scroll wheel movement
-    Wheel,    
+    Wheel,
     //Hover,    // pointer entered widget which while button was not down (return true to track Hover state)
     /// pointer left widget which has before processed Move message, while button was not down
-    Leave     
+    Leave
 }
 
 /// Mouse flag bits (mouse buttons and keyboard modifiers) for MouseEvent
@@ -802,7 +803,7 @@ struct ButtonDetails {
     @property ushort downFlags() { return _downFlags; }
 }
 
-/** 
+/**
     Mouse event
  */
 class MouseEvent {
@@ -837,11 +838,11 @@ class MouseEvent {
     /// middle button state details
     @property ref ButtonDetails mbutton() { return _mbutton; }
     /// button state details for event's button
-    @property ref ButtonDetails buttonDetails() { 
+    @property ref ButtonDetails buttonDetails() {
         if (_button == MouseButton.Right)
-            return _rbutton; 
+            return _rbutton;
         if (_button == MouseButton.Middle)
-            return _mbutton; 
+            return _mbutton;
         return _lbutton;
     }
     /// button which caused ButtonUp or ButtonDown action
@@ -943,33 +944,33 @@ enum KeyAction : uint {
 /// Keyboard flags for KeyEvent
 enum KeyFlag : uint {
     /// Ctrl key is down
-    Control = 0x0008,
+    Control = 0x0001,
     /// Shift key is down
-    Shift   = 0x0004,
+    Shift   = 0x0002,
     /// Alt key is down
-    Alt     = 0x0080,
+    Alt     = 0x0004,
     Option  = Alt,
     /// Menu key
-    Menu    = 0x0040,
+    Menu    = 0x0008,
     Command = Menu,
     // Flags not counting left or right difference
     MainFlags = 0xFF,
     /// Right Ctrl key is down
-    RControl = 0x0108,
+    RControl = 0x0101,
     /// Right Shift key is down
-    RShift   = 0x0104,
+    RShift   = 0x0202,
     /// Right Alt key is down
-    RAlt     = 0x0180,
-    /// Left Ctrl key is down
-    LControl = 0x0208,
-    /// Left Shift key is down
-    LShift   = 0x0204,
-    /// Left Alt key is down
-    LAlt     = 0x0280,
-    /// Left Menu/Win key is down
-    LMenu    = 0x0240,
+    RAlt     = 0x0404,
     /// Right Menu/Win key is down
-    RMenu    = 0x0140,
+    RMenu    = 0x0808,
+    /// Left Ctrl key is down
+    LControl = 0x1001,
+    /// Left Shift key is down
+    LShift   = 0x2002,
+    /// Left Alt key is down
+    LAlt     = 0x4004,
+    /// Left Menu/Win key is down
+    LMenu    = 0x8008,
 
     LRControl = LControl | RControl, // both left and right
     LRAlt = LAlt | RAlt, // both left and right
@@ -1209,7 +1210,7 @@ enum KeyCode : uint {
     //LMENU = 0xA4, //VK_LMENU
     //RMENU = 0xA5,
     /// ;
-    SEMICOLON = 0x201, 
+    SEMICOLON = 0x201,
     /// ~
     TILDE = 0x202,
     /// '
@@ -1242,9 +1243,11 @@ class KeyEvent {
     @property dstring text() { return _text; }
 
     /// returns true if no modifier flags are set
-    @property bool noModifiers() { return (_flags & (KeyFlag.Control | KeyFlag.Alt | KeyFlag.Menu | KeyFlag.Shift)) == 0; }
+    @property bool noModifiers() { return modifiers == 0; }
     /// returns true if any modifier flag is set
     @property bool hasModifiers() { return !noModifiers; }
+    /// returns modifier flags filtered for KeyFlag.Control | KeyFlag.Alt | KeyFlag.Menu | KeyFlag.Shift only
+    @property uint modifiers() { return (_flags & (KeyFlag.Control | KeyFlag.Alt | KeyFlag.Menu | KeyFlag.Shift)); }
 
     /// create key event
     this(KeyAction action, uint keyCode, uint flags, dstring text = null) {
@@ -1264,7 +1267,7 @@ enum ScrollAction : ubyte {
     /// space above indicator pressed
     PageUp,
     /// space below indicator pressed
-    PageDown, 
+    PageDown,
     /// up/left button pressed
     LineUp,
     /// down/right button pressed
@@ -1348,7 +1351,7 @@ class ScrollEvent {
     }
 }
 
-/** 
+/**
 Converts key name to KeyCode enum value
 For unknown key code, returns 0
 */
@@ -1429,8 +1432,8 @@ uint parseKeyName(string name) {
     }
 }
 
-/** 
-    Converts KeyCode enum value to human readable key name 
+/**
+    Converts KeyCode enum value to human readable key name
 
     For unknown key code, prints its hex value.
 */
@@ -1592,6 +1595,10 @@ string keyName(uint keyCode) {
             return "Space";
         case KeyCode.RETURN:
             return "Enter";
+        case KeyCode.KEY_ADD:
+            return ` "+"`;
+        case KeyCode.KEY_SUBTRACT:
+            return ` "-"`;
         default:
             return format("0x%08x", keyCode);
     }
@@ -1652,7 +1659,7 @@ class RunnableEvent : CustomEvent {
 /**
 Queue destroy event.
 
-This event allows delayed widget destruction and is used internally by 
+This event allows delayed widget destruction and is used internally by
 $(LINK2 $(DDOX_ROOT_DIR)dlangui/platforms/common/platform/Window.queueWidgetDestroy.html, Window.queueWidgetDestroy()).
 */
 class QueueDestroyEvent : RunnableEvent {
@@ -1661,7 +1668,7 @@ class QueueDestroyEvent : RunnableEvent {
     {
         _widgetToDestroy = widgetToDestroy;
         super(1,null, delegate void () {
-            if (_widgetToDestroy.parent) 
+            if (_widgetToDestroy.parent)
                 _widgetToDestroy.parent.removeChild(_widgetToDestroy);
             destroy(_widgetToDestroy);
         });

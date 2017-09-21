@@ -57,7 +57,7 @@ class AbstractSlider : WidgetGroup {
     /// returns slider position
     @property int position() const { return _position; }
     /// sets new slider position
-    @property AbstractSlider position(int newPosition) { 
+    @property AbstractSlider position(int newPosition) {
         if (_position != newPosition) {
             _position = newPosition;
             onPositionChanged();
@@ -136,12 +136,12 @@ class AbstractSlider : WidgetGroup {
     /// returns scrollbar orientation (Vertical, Horizontal)
     @property Orientation orientation() { return _orientation; }
     /// sets scrollbar orientation
-    @property AbstractSlider orientation(Orientation value) { 
+    @property AbstractSlider orientation(Orientation value) {
         if (_orientation != value) {
-            _orientation = value; 
-            requestLayout(); 
+            _orientation = value;
+            requestLayout();
         }
-        return this; 
+        return this;
     }
 
 }
@@ -282,6 +282,11 @@ class ScrollBar : AbstractSlider, OnClickHandler {
         return sendScrollEvent(ScrollAction.SliderMoved, currentPosition);
     }
 
+    /// true if full scroll range is visible, and no need of scrolling at all
+    @property bool fullRangeVisible() {
+        return _pageSize >= _maxValue - _minValue;
+    }
+
     private bool calcButtonSizes(int availableSize, ref int spaceBackSize, ref int spaceForwardSize, ref int indicatorSize) {
         int dv = _maxValue - _minValue;
         if (_pageSize >= dv) {
@@ -317,15 +322,25 @@ class ScrollBar : AbstractSlider, OnClickHandler {
     /// returns scrollbar orientation (Vertical, Horizontal)
     override @property Orientation orientation() { return _orientation; }
     /// sets scrollbar orientation
-    override @property AbstractSlider orientation(Orientation value) { 
+    override @property AbstractSlider orientation(Orientation value) {
         if (_orientation != value) {
             _orientation = value;
-            _btnBack.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_BUTTON_UP : ATTR_SCROLLBAR_BUTTON_LEFT);
-            _btnForward.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_BUTTON_DOWN : ATTR_SCROLLBAR_BUTTON_RIGHT);
-            _indicator.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_INDICATOR_VERTICAL : ATTR_SCROLLBAR_INDICATOR_HORIZONTAL);
+            updateDrawableIds();
             requestLayout();
         }
-        return this; 
+        return this;
+    }
+
+    void updateDrawableIds() {
+        _btnBack.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_BUTTON_UP : ATTR_SCROLLBAR_BUTTON_LEFT);
+        _btnForward.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_BUTTON_DOWN : ATTR_SCROLLBAR_BUTTON_RIGHT);
+        _indicator.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_INDICATOR_VERTICAL : ATTR_SCROLLBAR_INDICATOR_HORIZONTAL);
+    }
+
+    /// handle theme change: e.g. reload some themed resources
+    override void onThemeChanged() {
+        super.onThemeChanged();
+        updateDrawableIds();
     }
 
     /// set string property value, for ML loaders
@@ -373,7 +388,7 @@ class ScrollBar : AbstractSlider, OnClickHandler {
         _pageDown.click = &onClick;
     }
 
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         Point sz;
         _btnBack.measure(parentWidth, parentHeight);
         _btnForward.measure(parentWidth, parentHeight);
@@ -418,8 +433,10 @@ class ScrollBar : AbstractSlider, OnClickHandler {
             _btnBack.setState(State.Enabled);
             _btnForward.setState(State.Enabled);
             _indicator.visibility = Visibility.Visible;
-            _pageUp.visibility = Visibility.Visible;
-            _pageDown.visibility = Visibility.Visible;
+            if (_position > _minValue)
+                _pageUp.visibility = Visibility.Visible;
+            if (_position < _maxValue)
+                _pageDown.visibility = Visibility.Visible;
         } else {
             _btnBack.resetState(State.Enabled);
             _btnForward.resetState(State.Enabled);
@@ -468,16 +485,16 @@ class ScrollBar : AbstractSlider, OnClickHandler {
             if (_scrollArea.top < irc.top) {
                 r = _scrollArea;
                 r.bottom = irc.top;
-                _pageUp.layout(r);
                 _pageUp.visibility = Visibility.Visible;
+                _pageUp.layout(r);
             } else {
                 _pageUp.visibility = Visibility.Invisible;
             }
             if (_scrollArea.bottom > irc.bottom) {
                 r = _scrollArea;
                 r.top = irc.bottom;
-                _pageDown.layout(r);
                 _pageDown.visibility = Visibility.Visible;
+                _pageDown.layout(r);
             } else {
                 _pageDown.visibility = Visibility.Invisible;
             }
@@ -486,16 +503,16 @@ class ScrollBar : AbstractSlider, OnClickHandler {
             if (_scrollArea.left < irc.left) {
                 r = _scrollArea;
                 r.right = irc.left;
-                _pageUp.layout(r);
                 _pageUp.visibility = Visibility.Visible;
+                _pageUp.layout(r);
             } else {
                 _pageUp.visibility = Visibility.Invisible;
             }
             if (_scrollArea.right > irc.right) {
                 r = _scrollArea;
                 r.left = irc.right;
-                _pageDown.layout(r);
                 _pageDown.visibility = Visibility.Visible;
+                _pageDown.layout(r);
             } else {
                 _pageDown.visibility = Visibility.Invisible;
             }
@@ -756,13 +773,13 @@ class SliderWidget : AbstractSlider, OnClickHandler {
     /// returns scrollbar orientation (Vertical, Horizontal)
     override @property Orientation orientation() { return _orientation; }
     /// sets scrollbar orientation
-    override @property AbstractSlider orientation(Orientation value) { 
+    override @property AbstractSlider orientation(Orientation value) {
         if (_orientation != value) {
-            _orientation = value; 
+            _orientation = value;
             _indicator.drawableId = style.customDrawableId(_orientation == Orientation.Vertical ? ATTR_SCROLLBAR_INDICATOR_VERTICAL : ATTR_SCROLLBAR_INDICATOR_HORIZONTAL);
-            requestLayout(); 
+            requestLayout();
         }
-        return this; 
+        return this;
     }
 
     /// set string property value, for ML loaders
@@ -801,7 +818,7 @@ class SliderWidget : AbstractSlider, OnClickHandler {
         _pageDown.click = &onClick;
     }
 
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         Point sz;
         _indicator.measure(parentWidth, parentHeight);
         _pageUp.measure(parentWidth, parentHeight);

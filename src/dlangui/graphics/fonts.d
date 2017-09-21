@@ -100,14 +100,14 @@ static if (ENABLE_OPENGL) {
     private __gshared void function(uint id) _glyphDestroyCallback;
     /**
      * get glyph destroy callback (to cleanup OpenGL caches)
-     * 
+     *
      * Used for resource management. Usually you don't have to call it manually.
      */
     @property void function(uint id) glyphDestroyCallback() { return _glyphDestroyCallback; }
     /**
      * Set glyph destroy callback (to cleanup OpenGL caches)
      * This callback is used to tell OpenGL glyph cache that glyph is not more used - to let OpenGL glyph cache delete texture if all glyphs in it are no longer used.
-     * 
+     *
      * Used for resource management. Usually you don't have to call it manually.
      */
     @property void glyphDestroyCallback(void function(uint id) callback) { _glyphDestroyCallback = callback; }
@@ -115,9 +115,9 @@ static if (ENABLE_OPENGL) {
     private __gshared uint _nextGlyphId;
     /**
      * ID generator for glyphs
-     * 
+     *
      * Generates next glyph ID. Unique IDs are being used to control OpenGL glyph cache items lifetime.
-     * 
+     *
      * Used for resource management. Usually you don't have to call it manually.
      */
     uint nextGlyphId() { return _nextGlyphId++; }
@@ -196,7 +196,7 @@ class Font : RefCountedObject {
      *
      * Params:
      *          text = text string to measure
-     *          widths = output buffer to put measured widths (widths[i] will be set to cumulative widths text[0..i])
+     *          widths = output buffer to put measured widths (widths[i] will be set to cumulative widths text[0..i], see also _textSizeBuffer description)
      *          maxWidth = maximum width to measure - measure is stopping if max width is reached (pass MAX_WIDTH_UNSPECIFIED to measure all characters)
      *          tabSize = tabulation size, in number of spaces
      *          tabOffset = when string is drawn not from left position, use to move tab stops left/right
@@ -257,11 +257,19 @@ class Font : RefCountedObject {
         return charsMeasured;
     }
 
-    protected int[] _textSizeBuffer; // buffer to reuse while measuring strings - to avoid GC
+    /*************************************************************************
+     * Buffer to reuse while measuring strings to avoid GC
+     *
+     * This array store character widths cumulatively.
+     * For example, after measure of monospaced 10-pixel-width font line
+     * "abc def" _textSizeBuffer should contain something like:
+     * [10, 20, 30, 40, 50, 60, 70]
+     ************************************************************************/
+    protected int[] _textSizeBuffer;
 
     /*************************************************************************
      * Measure text string as single line, returns width and height
-     * 
+     *
      * Params:
      *          text = text string to measure
      *          maxWidth = maximum width - measure is stopping if max width is reached
@@ -326,7 +334,7 @@ class Font : RefCountedObject {
                     buf.fillRect(Rect(x + xx, underlineY, x + xx2, underlineY + underlineHeight), color);
                 // turn off underline after hot key
                 if (!(textFlags & TextFlag.Underline))
-                    underline = false; 
+                    underline = false;
             }
 
             if (ch == ' ' || ch == '\t')
@@ -507,7 +515,7 @@ struct SimpleTextFormatter {
                     // track last word end
                     if (prevChar != '\t' && prevChar != ' ' && prevChar != 0) {
                         lastWordEnd = i;
-                        lastWordEndX = widths[i]; 
+                        lastWordEndX = widths[i];
                     }
                     prevChar = ch;
                     continue;
@@ -556,7 +564,7 @@ struct SimpleTextFormatter {
             y += lineHeight;
         }
     }
-    
+
     /// draw horizontaly aligned formatted text
     void draw(DrawBuf buf, int x, int y, FontRef fnt, uint color, ubyte alignment) {
         int lineHeight = fnt.height;
@@ -587,11 +595,11 @@ struct FontList {
     ~this() {
         clear();
     }
-    
+
     @property uint length() {
         return _len;
     }
-    
+
     void clear() {
         foreach(i; 0 .. _len) {
             _list[i].clear();
@@ -790,7 +798,7 @@ class FontManager {
  *
  *
  * Recently used glyphs are marked with glyph.lastUsage = 1
- * 
+ *
  * checkpoint() call clears usage marks
  *
  * cleanup() removes all items not accessed since last checkpoint()
@@ -800,7 +808,7 @@ struct GlyphCache
 {
     alias glyph_ptr = Glyph*;
     private glyph_ptr[][1024] _glyphs;
-    
+
     /// try to find glyph for character in cache, returns null if not found
     glyph_ptr find(dchar ch) {
         ch = ch & 0xF_FFFF;
@@ -817,7 +825,7 @@ struct GlyphCache
         res.lastUsage = 1;
         return res;
     }
-    
+
     /// put character glyph to cache
     glyph_ptr put(dchar ch, glyph_ptr glyph) {
         ch = ch & 0xF_FFFF;
@@ -829,7 +837,7 @@ struct GlyphCache
         glyph.lastUsage = 1;
         return glyph;
     }
-    
+
     /// removes entries not used after last call of checkpoint() or cleanup()
     void cleanup() {
         foreach(part; _glyphs) {
@@ -848,7 +856,7 @@ struct GlyphCache
             }
         }
     }
-    
+
     /// clear usage flags for all entries
     void checkpoint() {
         foreach(part; _glyphs) {
@@ -859,7 +867,7 @@ struct GlyphCache
             }
         }
     }
-    
+
     /// removes all entries (when built with USE_OPENGL version, notify OpenGL cache about removed glyphs)
     void clear() {
         foreach(part; _glyphs) {
@@ -916,6 +924,67 @@ class glyph_gamma_table(int maxv = 65)
 private:
     ubyte[maxv] _map;
     double _gamma = 1.0;
+}
+
+/// find some suitable replacement for important characters missing in font
+dchar getReplacementChar(dchar code) {
+    switch (code) {
+        case UNICODE_SOFT_HYPHEN_CODE:
+            return '-';
+        case 0x0401: // CYRILLIC CAPITAL LETTER IO
+            return 0x0415; //CYRILLIC CAPITAL LETTER IE
+        case 0x0451: // CYRILLIC SMALL LETTER IO
+            return 0x0435; // CYRILLIC SMALL LETTER IE
+        case UNICODE_NO_BREAK_SPACE:
+            return ' ';
+        case 0x2010:
+        case 0x2011:
+        case 0x2012:
+        case 0x2013:
+        case 0x2014:
+        case 0x2015:
+            return '-';
+        case 0x2018:
+        case 0x2019:
+        case 0x201a:
+        case 0x201b:
+            return '\'';
+        case 0x201c:
+        case 0x201d:
+        case 0x201e:
+        case 0x201f:
+        case 0x00ab:
+        case 0x00bb:
+            return '\"';
+        case 0x2039:
+            return '<';
+        case 0x203A:
+        case '‣':
+        case '►':
+            return '>';
+        case 0x2044:
+            return '/';
+        case 0x2022: // css_lst_disc:
+            return '*';
+        case 0x26AA: // css_lst_disc:
+        case 0x25E6: // css_lst_disc:
+        case 0x25CF: // css_lst_disc:
+            return 'o';
+        case 0x25CB: // css_lst_circle:
+            return '*';
+        case 0x25A0: // css_lst_square:
+            return '-';
+        case '↑': //
+            return '▲';
+        case '↓': //
+            return '▼';
+        case '▲': //
+            return '^';
+        case '▼': //
+            return 'v';
+        default:
+            return 0;
+    }
 }
 
 __gshared glyph_gamma_table!65 _gamma65;

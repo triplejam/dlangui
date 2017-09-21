@@ -24,6 +24,7 @@ import dlangui.widgets.scrollbar;
 import dlangui.widgets.layouts;
 import dlangui.core.signals;
 
+
 /** interface - slot for onAdapterChangeListener */
 interface OnAdapterChangeHandler {
     void onAdapterChange(ListAdapter source);
@@ -308,7 +309,7 @@ class StringListAdapterBase : ListAdapterBase {
     @property ref const(UIStringCollection) items() { return _items; }
 
     /** Replace items collection. */
-    @property StringListAdapterBase items(dstring[] values) { 
+    @property StringListAdapterBase items(dstring[] values) {
         _items = values;
         _intIds.length = items.length;
         _states.length = _items.length;
@@ -325,7 +326,7 @@ class StringListAdapterBase : ListAdapterBase {
     }
 
     /** Replace items collection. */
-    @property StringListAdapterBase items(UIString[] values) { 
+    @property StringListAdapterBase items(UIString[] values) {
         _items = values;
         _intIds.length = items.length;
         _states.length = _items.length;
@@ -342,7 +343,7 @@ class StringListAdapterBase : ListAdapterBase {
     }
 
     /** Replace items collection. */
-    @property StringListAdapterBase items(StringListValue[] values) { 
+    @property StringListAdapterBase items(StringListValue[] values) {
         _items = values;
         _intIds.length = items.length;
         _states.length = _items.length;
@@ -583,7 +584,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
     /// returns linear layout orientation (Vertical, Horizontal)
     @property Orientation orientation() { return _orientation; }
     /// sets linear layout orientation
-    @property ListWidget orientation(Orientation value) { 
+    @property ListWidget orientation(Orientation value) {
         _orientation = value;
         _scrollbar.orientation = value;
         requestLayout();
@@ -666,27 +667,27 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
             _adapter.disconnect(this);
         if (_adapter !is null && _ownAdapter)
             destroy(_adapter);
-        _adapter = adapter; 
+        _adapter = adapter;
         if (_adapter)
             _adapter.connect(this);
         _ownAdapter = false;
         onAdapterChange(_adapter);
-        return this; 
+        return this;
     }
     /// set adapter, which will be owned by list (destroy will be called for adapter on widget destroy)
-    @property ListWidget ownAdapter(ListAdapter adapter) { 
+    @property ListWidget ownAdapter(ListAdapter adapter) {
         if (_adapter is adapter)
             return this; // no changes
         if (_adapter)
             _adapter.disconnect(this);
         if (_adapter !is null && _ownAdapter)
             destroy(_adapter);
-        _adapter = adapter; 
+        _adapter = adapter;
         if (_adapter)
             _adapter.connect(this);
         _ownAdapter = true;
         onAdapterChange(_adapter);
-        return this; 
+        return this;
     }
 
     /// returns number of widgets in list
@@ -942,10 +943,37 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         if (_adapter)
             _adapter.onThemeChanged();
     }
-    
+
     /// sets minimum size for the list, override to change
     Point minimumVisibleContentSize() {
-        return Point(100, 100);
+        if (_orientation == Orientation.Vertical)
+            return Point(measureMinChildrenSize().x, 100);
+        else
+            return Point(100, measureMinChildrenSize().y);
+    }
+
+    protected Point measureMinChildrenSize() {
+        // measure children
+        Point sz;
+        for (int i = 0; i < itemCount; i++) {
+            Widget w = itemWidget(i);
+            if (w is null || w.visibility == Visibility.Gone)
+                continue;
+
+            w.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
+            if (_orientation == Orientation.Vertical) {
+                // Vertical
+                if (sz.x < w.measuredWidth)
+                    sz.x = w.measuredWidth;
+                sz.y += w.measuredHeight;
+            } else {
+                // Horizontal
+                if (sz.y < w.measuredHeight)
+                    sz.y = w.measuredHeight;
+                sz.x += w.measuredWidth;
+            }
+        }
+        return sz;
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
@@ -958,7 +986,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
             _itemSizes.length = itemCount;
         Rect m = margins;
         Rect p = padding;
-        
+
         // set widget area to small when first measure
         if (parentWidth == SIZE_UNSPECIFIED && parentHeight == SIZE_UNSPECIFIED)
         {
@@ -966,7 +994,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
             measuredContent(parentWidth, parentHeight, sz.x, sz.y);
             return;
         }
-        
+
         // calc size constraints for children
         int pwidth = parentWidth;
         int pheight = parentHeight;
@@ -1004,7 +1032,6 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 sz.y += w.measuredHeight;
             } else {
                 // Horizontal
-                w.measure(pwidth, pheight);
                 if (sz.y < w.measuredHeight)
                     sz.y = w.measuredHeight;
                 sz.x += w.measuredWidth;
@@ -1145,15 +1172,10 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         if (_lastMeasureWidth != rc.width || _lastMeasureHeight != rc.height)
             measure(parentrc.width, parentrc.height);
 
+        // hide scrollbar or update rc for scrollbar
+        Rect sbrect = rc;
         // layout scrollbar
         if (_needScrollbar) {
-            _scrollbar.visibility = Visibility.Visible;
-            Rect sbrect = rc;
-            if (_orientation == Orientation.Vertical)
-                sbrect.left = sbrect.right - _sbsz.x;
-            else
-                sbrect.top = sbrect.bottom - _sbsz.y;
-            _scrollbar.layout(sbrect);
             rc.right -= _sbsz.x;
             rc.bottom -= _sbsz.y;
         } else {
@@ -1164,6 +1186,16 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
 
         // calc item rectangles
         updateItemPositions();
+
+        // layout scrollbar - must be under updateItemPositions()
+        if (_needScrollbar) {
+            _scrollbar.visibility = Visibility.Visible;
+            if (_orientation == Orientation.Vertical)
+                sbrect.left = sbrect.right - _sbsz.x;
+            else
+                sbrect.top = sbrect.bottom - _sbsz.y;
+            _scrollbar.layout(sbrect);
+        }
 
         if (_makeSelectionVisibleOnNextLayout) {
             makeSelectionVisible();
@@ -1369,6 +1401,11 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
 }
 
 class StringListWidget : ListWidget {
+    import std.conv : to;
+    import std.datetime : dto = to, StopWatch;
+    private dstring _searchString;
+    private StopWatch _stopWatch;
+
     this(string ID = null) {
         super(ID);
         styleId = STYLE_EDIT_BOX;
@@ -1379,13 +1416,13 @@ class StringListWidget : ListWidget {
         styleId = STYLE_EDIT_BOX;
         ownAdapter = new StringListAdapter(items);
     }
-    
+
     this(string ID, dstring[] items) {
         super(ID);
         styleId = STYLE_EDIT_BOX;
         ownAdapter = new StringListAdapter(items);
     }
-    
+
     this(string ID, StringListValue[] items) {
         super(ID);
         styleId = STYLE_EDIT_BOX;
@@ -1400,7 +1437,7 @@ class StringListWidget : ListWidget {
         }
         requestLayout();
     }
-    
+
     @property void items(dstring[] items) {
         _selectedItemIndex = -1;
         ownAdapter = new StringListAdapter(items);
@@ -1409,7 +1446,7 @@ class StringListWidget : ListWidget {
         }
         requestLayout();
     }
-    
+
     @property void items(StringListValue[] items) {
         _selectedItemIndex = -1;
         ownAdapter = new StringListAdapter(items);
@@ -1418,7 +1455,7 @@ class StringListWidget : ListWidget {
         }
         requestLayout();
     }
-    
+
     /// StringListValue list values
     override bool setStringListValueListProperty(string propName, StringListValue[] values) {
         if (propName == "items") {
@@ -1434,6 +1471,74 @@ class StringListWidget : ListWidget {
             return "";
         return (cast(StringListAdapter)adapter).items.get(_selectedItemIndex);
     }
+
+    override bool onKeyEvent(KeyEvent event) {
+        if (itemCount == 0) return false;
+
+        // Accept user input and try to find a match in the list.
+        if (event.action == KeyAction.Text) {
+            if ( !_stopWatch.running) { _stopWatch.start; }
+
+            auto timePassed = _stopWatch.peek.dto!("seconds", float)(); // dtop is std.datetime.to
+
+            if (timePassed > 0.5) _searchString = ""d;
+            _searchString ~= to!dchar(event.text.toUTF8);
+            _stopWatch.reset;
+
+            if ( selectClosestMatch(_searchString) ) {
+                invalidate();
+                return true;
+            }
+        }
+
+        return super.onKeyEvent(event);
+    }
+
+
+    private bool selectClosestMatch(dstring term) {
+        import std.uni : toLower;
+        if (term.length == 0) return false;
+        auto myItems = (cast(StringListAdapter)adapter).items;
+
+        // Perfect match or best match
+        int[] indexes;
+        foreach(int itemIndex; 0 .. myItems.length) {
+            dstring item = myItems.get(itemIndex);
+
+            if (item == term) {
+                // Perfect match
+                indexes ~= itemIndex;
+                break;
+            } else {
+                // Term approximate to something
+                bool addItem = true;
+                foreach(int termIndex; 0 .. cast(int)term.length) {
+                    if (termIndex < item.length) {
+                        if ( toLower(term[termIndex]) != toLower(item[termIndex]) ) {
+                            addItem = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (addItem) { indexes ~= itemIndex; }
+
+            }
+        }
+
+        // Return best match
+        if (indexes.length > 0) {
+            selectItem(indexes[0]);
+            itemSelected(this, indexes[0]);
+            return true;
+        }
+
+        return false; // Did not find term
+
+    }
+
+
+
 }
 
 //import dlangui.widgets.metadata;

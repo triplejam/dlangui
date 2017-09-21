@@ -4,6 +4,7 @@ import dlangui;
 import dlangui.dialogs.filedlg;
 import dlangui.dialogs.dialog;
 import dlangui.dml.dmlhighlight;
+import dlangui.widgets.metadata;
 import std.array : replaceFirst;
 
 mixin APP_ENTRY_POINT;
@@ -53,8 +54,8 @@ class DMLSourceEdit : SourceEdit {
         setTokenHightlightColor(TokenCategory.Comment, 0x008000); // green
         setTokenHightlightColor(TokenCategory.Keyword, 0x0000FF); // blue
         setTokenHightlightColor(TokenCategory.String, 0xa31515);  // brown
-        setTokenHightlightColor(TokenCategory.Integer, 0xa315C0);  // 
-        setTokenHightlightColor(TokenCategory.Float, 0xa315C0);  // 
+        setTokenHightlightColor(TokenCategory.Integer, 0xa315C0);  //
+        setTokenHightlightColor(TokenCategory.Float, 0xa315C0);  //
         setTokenHightlightColor(TokenCategory.Error, 0xFF0000);  // red
         setTokenHightlightColor(TokenCategory.Op, 0x503000);
         setTokenHightlightColor(TokenCategory.Identifier_Class, 0x000080);  // blue
@@ -65,14 +66,14 @@ class DMLSourceEdit : SourceEdit {
     }
 }
 
-immutable dstring SAMPLE_SOURCE_CODE = 
+immutable dstring SAMPLE_SOURCE_CODE =
 q{VerticalLayout {
     id: vlayout
     margins: Rect { left: 5; right: 3; top: 2; bottom: 4 }
     padding: Rect { 5, 4, 3, 2 } // same as Rect { left: 5; top: 4; right: 3; bottom: 2 }
     TextWidget {
-        /* this widget can be accessed via id myLabel1 
-            e.g. w.childById!TextWidget("myLabel1") 
+        /* this widget can be accessed via id myLabel1
+            e.g. w.childById!TextWidget("myLabel1")
         */
         id: myLabel1
         text: "Some text"; padding: 5
@@ -91,6 +92,8 @@ q{VerticalLayout {
 }
 };
 
+// used to generate property lists once, then simply swap
+StringListAdapter[string] propListsAdapters;
 
 class EditFrame : AppFrame {
 
@@ -106,11 +109,11 @@ class EditFrame : AppFrame {
     override protected MainMenu createMainMenu() {
         mainMenuItems = new MenuItem();
         MenuItem fileItem = new MenuItem(new Action(1, "MENU_FILE"));
-        fileItem.add(ACTION_FILE_NEW, ACTION_FILE_OPEN, 
+        fileItem.add(ACTION_FILE_NEW, ACTION_FILE_OPEN,
                      ACTION_FILE_EXIT);
         mainMenuItems.add(fileItem);
         MenuItem editItem = new MenuItem(new Action(2, "MENU_EDIT"));
-        editItem.add(ACTION_EDIT_COPY, ACTION_EDIT_PASTE, 
+        editItem.add(ACTION_EDIT_COPY, ACTION_EDIT_PASTE,
                      ACTION_EDIT_CUT, ACTION_EDIT_UNDO, ACTION_EDIT_REDO,
                      ACTION_EDIT_INDENT, ACTION_EDIT_UNINDENT, ACTION_EDIT_TOGGLE_LINE_COMMENT, ACTION_EDIT_TOGGLE_BLOCK_COMMENT, ACTION_DEBUG_START);
 
@@ -181,15 +184,15 @@ class EditFrame : AppFrame {
                         window.close();
                     return true;
                 case IDEActions.HelpAbout:
-                    window.showMessageBox(UIString("About DlangUI ML Editor"d), 
-                                          UIString("DLangIDE\n(C) Vadim Lopatin, 2015\nhttp://github.com/buggins/dlangui\nSimple editor for DML code"d));
+                    window.showMessageBox(UIString.fromRaw("About DlangUI ML Editor"d),
+                                          UIString.fromRaw("DLangIDE\n(C) Vadim Lopatin, 2015\nhttp://github.com/buggins/dlangui\nSimple editor for DML code"d));
                     return true;
                 case IDEActions.FileNew:
                     UIString caption;
                     caption = "Create new DML file"d;
                     FileDialog dlg = createFileDialog(caption, false);
-                    dlg.addFilter(FileFilterEntry(UIString("DML files"d), "*.dml"));
-                    dlg.addFilter(FileFilterEntry(UIString("All files"d), "*.*"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("DML files"d), "*.dml"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("All files"d), "*.*"));
                     dlg.dialogResult = delegate(Dialog dlg, const Action result) {
                         if (result.id == ACTION_OPEN.id) {
                             string filename = result.stringParam;
@@ -207,8 +210,8 @@ class EditFrame : AppFrame {
                     UIString caption;
                     caption = "Save DML File as"d;
                     FileDialog dlg = createFileDialog(caption, false);
-                    dlg.addFilter(FileFilterEntry(UIString("DML files"d), "*.dml"));
-                    dlg.addFilter(FileFilterEntry(UIString("All files"d), "*.*"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("DML files"d), "*.dml"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("All files"d), "*.*"));
                     dlg.dialogResult = delegate(Dialog dlg, const Action result) {
                         if (result.id == ACTION_OPEN.id) {
                             string filename = result.stringParam;
@@ -221,8 +224,8 @@ class EditFrame : AppFrame {
                     UIString caption;
                     caption = "Open DML File"d;
                     FileDialog dlg = createFileDialog(caption);
-                    dlg.addFilter(FileFilterEntry(UIString("DML files"d), "*.dml"));
-                    dlg.addFilter(FileFilterEntry(UIString("All files"d), "*.*"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("DML files"d), "*.dml"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("All files"d), "*.*"));
                     dlg.dialogResult = delegate(Dialog dlg, const Action result) {
                         if (result.id == ACTION_OPEN.id) {
                             string filename = result.stringParam;
@@ -249,11 +252,17 @@ class EditFrame : AppFrame {
         switch (a.id) {
             case IDEActions.HelpAbout:
             case IDEActions.FileNew:
-            case IDEActions.FileSave:
             case IDEActions.FileOpen:
             case IDEActions.DebugStart:
             case IDEActions.EditPreferences:
+            case IDEActions.FileSaveAs:
                 a.state = ACTION_STATE_ENABLED;
+                return true;
+            case IDEActions.FileSave:
+                if (_content.modified)
+                    a.state = ACTION_STATE_ENABLED;
+                else
+                    a.state = ACTION_STATE_DISABLED;
                 return true;
             default:
                 return super.handleActionStateRequest(a);
@@ -302,6 +311,29 @@ class EditFrame : AppFrame {
         HorizontalLayout hlayout = new HorizontalLayout();
         hlayout.layoutWidth = FILL_PARENT;
         hlayout.layoutHeight = FILL_PARENT;
+        WidgetsList widgetsList = new WidgetsList();
+        StringListWidget propList = new StringListWidget();
+        auto sla = new StringListAdapter();
+        foreach(const ref widget; getRegisteredWidgetsList())
+        {
+            auto propertyListAdapter = new StringListAdapter();
+            if ( auto meta = findWidgetMetadata(widget) )
+            {
+                foreach(prop; meta.properties)
+                {
+                    propertyListAdapter.add(UIString.fromRaw(prop.name ~ "   [" ~ to!string(prop.type) ~ "]" ));
+                    propListsAdapters[widget] = propertyListAdapter;
+                }
+            }
+            sla.add(UIString.fromRaw(widget));
+        }
+        widgetsList.adapter = sla;
+        auto leftPanel = new VerticalLayout();
+        leftPanel.addChild(new TextWidget().text("Widgets").backgroundColor(0x7F7F7F) );
+        leftPanel.addChild(widgetsList);
+        leftPanel.addChild(new TextWidget().text("Widget properties").backgroundColor(0x7F7F7F));
+        leftPanel.addChild(propList);
+        hlayout.addChild(leftPanel);
         _editor = new DMLSourceEdit();
         hlayout.addChild(_editor);
         _editor.text = SAMPLE_SOURCE_CODE;
@@ -327,6 +359,17 @@ class EditFrame : AppFrame {
             updatePreview();
             return true;
         };
+        widgetsList.itemClick = delegate (Widget source, int itemIndex){
+            propList.adapter = propListsAdapters[to!string(widgetsList.selectedItem)];
+            return true;
+        };
+        widgetsList.onItemDoubleClick = delegate (Widget source, int itemIndex) {
+            auto caret = _editor.caretPos;
+            auto widgetClassName = widgetsList.selectedItem;
+            EditOperation op = new EditOperation(EditAction.Replace, caret, widgetClassName);
+            _editor.content.performOperation(op, this);
+        };
+
         previewControls.addChild(cbFillHorizontal);
         previewControls.addChild(cbFillVertical);
         previewControls.addChild(cbHighlightBackground);
@@ -342,6 +385,22 @@ class EditFrame : AppFrame {
         return bodyWidget;
     }
 
+}
+
+alias onItemDoubleClickHandler = void delegate (Widget source, int itemIndex);
+
+class WidgetsList : StringListWidget
+{
+    onItemDoubleClickHandler onItemDoubleClick;
+
+    override bool onMouseEvent(MouseEvent event) {
+        bool result = super.onMouseEvent(event);
+        if (event.doubleClick) {
+            if (onItemDoubleClick !is null)
+                onItemDoubleClick(this, selectedItemIndex);
+        }
+        return result;
+    }
 }
 
 /// entry point for dlangui based application

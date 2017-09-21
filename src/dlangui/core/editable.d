@@ -41,7 +41,7 @@ Bit mask:
 cccc ssss
 |    |
 |    \ ssss = token subcategory
-|     
+|
 \ cccc = token category
 
 */
@@ -198,6 +198,10 @@ struct TextRange {
     /// returns true if position is inside this range
     bool isInside(TextPosition p) const {
         return start <= p && end > p;
+    }
+    /// returns true if position is inside this range or right after this range
+    bool isInsideOrNext(TextPosition p) const {
+        return start <= p && end >= p;
     }
     /// returns true if range is empty
     @property bool empty() const {
@@ -436,7 +440,7 @@ interface EditableContentMarksChangeListener {
     void onMarksChange(EditableContent content, LineIcon[] movedMarks, LineIcon[] removedMarks);
 }
 
-/// TokenCategory holder 
+/// TokenCategory holder
 alias TokenProp = ubyte;
 /// TokenCategory string
 alias TokenPropString = TokenProp[];
@@ -768,7 +772,7 @@ class EditableContent {
     }
 
 
-    /// returns line text
+    /// returns line count
     @property int length() { return cast(int)_lines.length; }
     dstring opIndex(int index) {
         return line(index);
@@ -829,11 +833,11 @@ class EditableContent {
 
     /// returns previous character position
     TextPosition prevCharPos(TextPosition p) {
-        if (p.line <= 0)
+        if (p.line < 0)
             return TextPosition(0, 0);
         p.pos--;
         for (;;) {
-            if (p.line <= 0)
+            if (p.line < 0)
                 return TextPosition(0, 0);
             if (p.pos >= 0 && p.pos < lineLength(p.line))
                 return p;
@@ -1274,7 +1278,7 @@ class EditableContent {
                     dchar nextchar = i < linelen - 1 ? txt[i + 1] : ' ';
                     if (nextchar == '\t')
                         nextchar = ' ';
-                    if (isWordBound(thischar, nextchar) 
+                    if (isWordBound(thischar, nextchar)
                         || (camelCasePartsAsWords && isLowerAlpha(thischar) && isUpperAlpha(nextchar))) {
                             found = i + 1;
                             break;

@@ -195,58 +195,6 @@ class FreeTypeFontFile {
         return true; // successfully opened
     }
 
-    /// find some suitable replacement for important characters missing in font
-    static dchar getReplacementChar(dchar code) {
-        switch (code) {
-            case UNICODE_SOFT_HYPHEN_CODE:
-                return '-';
-            case 0x0401: // CYRILLIC CAPITAL LETTER IO
-                return 0x0415; //CYRILLIC CAPITAL LETTER IE
-            case 0x0451: // CYRILLIC SMALL LETTER IO
-                return 0x0435; // CYRILLIC SMALL LETTER IE
-            case UNICODE_NO_BREAK_SPACE:
-                return ' ';
-            case 0x2010:
-            case 0x2011:
-            case 0x2012:
-            case 0x2013:
-            case 0x2014:
-            case 0x2015:
-                return '-';
-            case 0x2018:
-            case 0x2019:
-            case 0x201a:
-            case 0x201b:
-                return '\'';
-            case 0x201c:
-            case 0x201d:
-            case 0x201e:
-            case 0x201f:
-            case 0x00ab:
-            case 0x00bb:
-                return '\"';
-            case 0x2039:
-                return '<';
-            case 0x203A:
-            case '‣':
-            case '►':
-                return '>';
-            case 0x2044:
-                return '/';
-            case 0x2022: // css_lst_disc:
-                return '*';
-            case 0x26AA: // css_lst_disc:
-            case 0x25E6: // css_lst_disc:
-            case 0x25CF: // css_lst_disc:
-                return 'o';
-            case 0x25CB: // css_lst_circle:
-                return '*';
-            case 0x25A0: // css_lst_square:
-                return '-';
-            default:
-                return 0;
-        }
-    }
 
     /// find glyph index for character
     FT_UInt getCharIndex(dchar code, dchar def_char = 0) {
@@ -255,8 +203,15 @@ class FreeTypeFontFile {
         FT_UInt ch_glyph_index = FT_Get_Char_Index(_face, code);
         if (ch_glyph_index == 0) {
             dchar replacement = getReplacementChar(code);
-            if (replacement)
+            if (replacement) {
                 ch_glyph_index = FT_Get_Char_Index(_face, replacement);
+                if (ch_glyph_index == 0) {
+                    replacement = getReplacementChar(replacement);
+                    if (replacement) {
+                        ch_glyph_index = FT_Get_Char_Index(_face, replacement);
+                    }
+                }
+            }
             if (ch_glyph_index == 0 && def_char)
                 ch_glyph_index = FT_Get_Char_Index( _face, def_char );
         }
@@ -373,7 +328,7 @@ class FreeTypeFont : Font {
         debug --_instanceCount;
         debug(resalloc) Log.d("Destroyed font, count=", _instanceCount);
     }
-    
+
     private int _size;
     private int _height;
 
@@ -472,8 +427,8 @@ class FreeTypeFont : Font {
 private derelict.util.exception.ShouldThrow missingSymFunc( string symName ) {
     import std.algorithm : equal;
     static import derelict.util.exception;
-    foreach(s; ["FT_New_Face", "FT_Attach_File", "FT_Set_Pixel_Sizes", 
-            "FT_Get_Char_Index", "FT_Load_Glyph", "FT_Done_Face", 
+    foreach(s; ["FT_New_Face", "FT_Attach_File", "FT_Set_Pixel_Sizes",
+            "FT_Get_Char_Index", "FT_Load_Glyph", "FT_Done_Face",
             "FT_Init_FreeType", "FT_Done_FreeType"]) {
         if (symName.equal(s)) // Symbol is used
             return derelict.util.exception.ShouldThrow.Yes;
@@ -684,7 +639,7 @@ class FreeTypeFontManager : FontManager {
                 destroy(font);
                 return false;
             }
-        
+
             if (face == null || weight == 0) {
                 // properties are not set by caller
                 // get properties from loaded font
@@ -736,8 +691,8 @@ bool registerFontConfigFonts(FreeTypeFontManager fontMan) {
 
     FcFontSet *fontset;
 
-    FcObjectSet *os = FcObjectSetBuild(FC_FILE.toStringz, FC_WEIGHT.toStringz, FC_FAMILY.toStringz, 
-                                        FC_SLANT.toStringz, FC_SPACING.toStringz, FC_INDEX.toStringz, 
+    FcObjectSet *os = FcObjectSetBuild(FC_FILE.toStringz, FC_WEIGHT.toStringz, FC_FAMILY.toStringz,
+                                        FC_SLANT.toStringz, FC_SPACING.toStringz, FC_INDEX.toStringz,
                                         FC_STYLE.toStringz, null);
     FcPattern *pat = FcPatternCreate();
     //FcBool b = 1;
@@ -867,7 +822,7 @@ bool registerFontConfigFonts(FreeTypeFontManager fontMan) {
             fontFamily = FontFamily.SansSerif;
         else if (face16.indexOf("serif") >= 0)
             fontFamily = FontFamily.Serif;
-                
+
         //css_ff_inherit,
         //css_ff_serif,
         //css_ff_sans_serif,
@@ -875,7 +830,7 @@ bool registerFontConfigFonts(FreeTypeFontManager fontMan) {
         //css_ff_fantasy,
         //css_ff_monospace,
         bool italic = (slant!=FC_SLANT_ROMAN);
-                
+
         string face = family.fromStringz.dup;
         string style16 = style.fromStringz.toLower.dup;
         if (style16.indexOf("condensed") >= 0)
@@ -909,11 +864,11 @@ bool registerFontConfigFonts(FreeTypeFontManager fontMan) {
             if ( !_cache.findDuplicate( &newDef ) )
                 _cache.update( &newDef, LVFontRef(NULL) );
         }
-                
+
         */
         facesFound++;
-                
-                
+
+
     }
 
     FcFontSetDestroy(fontset);

@@ -49,6 +49,13 @@ interface EditableContentChangeListener {
     void onEditableContentChanged(EditableContent source);
 }
 
+/// Flags used for search / replace / text highlight
+enum TextSearchFlag {
+    CaseSensitive = 1,
+    WholeWords = 2,
+    SelectionOnly = 4,
+}
+
 /// Editor action codes
 enum EditorActions : int {
     None = 0,
@@ -85,13 +92,13 @@ enum EditorActions : int {
     /// move cursor one page down with selection
     SelectPageDown,
     /// move cursor to the beginning of page
-    PageBegin, 
+    PageBegin,
     /// move cursor to the beginning of page with selection
-    SelectPageBegin, 
+    SelectPageBegin,
     /// move cursor to the end of page
-    PageEnd,   
+    PageEnd,
     /// move cursor to the end of page with selection
-    SelectPageEnd,   
+    SelectPageEnd,
     /// move cursor to the beginning of line
     LineBegin,
     /// move cursor to the beginning of line with selection
@@ -109,14 +116,14 @@ enum EditorActions : int {
     /// move cursor to the end of document with selection
     SelectDocumentEnd,
     /// delete char before cursor (backspace)
-    DelPrevChar, 
+    DelPrevChar,
     /// delete char after cursor (del key)
-    DelNextChar, 
+    DelNextChar,
     /// delete word before cursor (ctrl + backspace)
-    DelPrevWord, 
+    DelPrevWord,
     /// delete char after cursor (ctrl + del key)
-    DelNextWord, 
-    
+    DelNextWord,
+
     /// insert new line (Enter)
     InsertNewLine,
     /// insert new line before current position (Ctrl+Enter)
@@ -125,19 +132,19 @@ enum EditorActions : int {
     AppendNewLine,
 
     /// Turn On/Off replace mode
-    ToggleReplaceMode, 
-    
+    ToggleReplaceMode,
+
     /// Copy selection to clipboard
-    Copy, 
+    Copy,
     /// Cut selection to clipboard
-    Cut, 
+    Cut,
     /// Paste selection from clipboard
-    Paste, 
+    Paste,
     /// Undo last change
     Undo,
     /// Redo last undoed change
     Redo,
-    
+
     /// Tab (e.g., Tab key to insert tab character or indent text)
     Tab,
     /// Tab (unindent text, or remove whitespace before cursor, usually Shift+Tab)
@@ -149,9 +156,9 @@ enum EditorActions : int {
 
     /// Select whole content (usually, Ctrl+A)
     SelectAll,
-    
+
     // Scroll operations
-    
+
     /// Scroll one line up (not changing cursor)
     ScrollLineUp,
     /// Scroll one line down (not changing cursor)
@@ -164,12 +171,12 @@ enum EditorActions : int {
     ScrollLeft,
     /// Scroll window right
     ScrollRight,
-    
+
     /// Zoom in editor font
     ZoomIn,
     /// Zoom out editor font
     ZoomOut,
-    
+
     /// Togle line comment
     ToggleLineComment,
     /// Toggle block comment
@@ -189,7 +196,12 @@ enum EditorActions : int {
     /// Find text
     Find,
     /// Replace text
-    Replace
+    Replace,
+
+    /// Find next occurence - continue search forward
+    FindNext,
+    /// Find previous occurence - continue search backward
+    FindPrev,
 }
 
 
@@ -209,14 +221,17 @@ const Action ACTION_EDITOR_TOGGLE_BLOCK_COMMENT = (new Action(EditorActions.Togg
 const Action ACTION_EDITOR_TOGGLE_BOOKMARK = (new Action(EditorActions.ToggleBookmark, "ACTION_EDITOR_TOGGLE_BOOKMARK"c, null, KeyCode.KEY_B, KeyFlag.Control | KeyFlag.Shift));
 const Action ACTION_EDITOR_GOTO_NEXT_BOOKMARK = (new Action(EditorActions.GoToNextBookmark, "ACTION_EDITOR_GOTO_NEXT_BOOKMARK"c, null, KeyCode.DOWN, KeyFlag.Control | KeyFlag.Shift | KeyFlag.Alt));
 const Action ACTION_EDITOR_GOTO_PREVIOUS_BOOKMARK = (new Action(EditorActions.GoToPreviousBookmark, "ACTION_EDITOR_GOTO_PREVIOUS_BOOKMARK"c, null, KeyCode.UP, KeyFlag.Control | KeyFlag.Shift | KeyFlag.Alt));
-const Action ACTION_EDITOR_FIND = (new Action(EditorActions.Find, KeyCode.KEY_F, KeyFlag.Control));
-const Action ACTION_EDITOR_REPLACE = (new Action(EditorActions.Replace, KeyCode.KEY_H, KeyFlag.Control));
+const Action ACTION_EDITOR_FIND = (new Action(EditorActions.Find, "ACTION_EDITOR_FIND"c, null, KeyCode.KEY_F, KeyFlag.Control));
+const Action ACTION_EDITOR_FIND_NEXT = (new Action(EditorActions.FindNext, "ACTION_EDITOR_FIND_NEXT"c, null, KeyCode.F3, 0));
+const Action ACTION_EDITOR_FIND_PREV = (new Action(EditorActions.FindPrev, "ACTION_EDITOR_FIND_PREV"c, null, KeyCode.F3, KeyFlag.Shift));
+const Action ACTION_EDITOR_REPLACE = (new Action(EditorActions.Replace, "ACTION_EDITOR_REPLACE"c, null, KeyCode.KEY_H, KeyFlag.Control));
 
-const Action[] STD_EDITOR_ACTIONS = [ACTION_EDITOR_INSERT_NEW_LINE, ACTION_EDITOR_PREPEND_NEW_LINE, 
-        ACTION_EDITOR_APPEND_NEW_LINE, ACTION_EDITOR_DELETE_LINE, ACTION_EDITOR_TOGGLE_REPLACE_MODE, 
+const Action[] STD_EDITOR_ACTIONS = [ACTION_EDITOR_INSERT_NEW_LINE, ACTION_EDITOR_PREPEND_NEW_LINE,
+        ACTION_EDITOR_APPEND_NEW_LINE, ACTION_EDITOR_DELETE_LINE, ACTION_EDITOR_TOGGLE_REPLACE_MODE,
         ACTION_EDITOR_SELECT_ALL, ACTION_EDITOR_TOGGLE_LINE_COMMENT, ACTION_EDITOR_TOGGLE_BLOCK_COMMENT,
         ACTION_EDITOR_TOGGLE_BOOKMARK, ACTION_EDITOR_GOTO_NEXT_BOOKMARK, ACTION_EDITOR_GOTO_PREVIOUS_BOOKMARK,
-
+        ACTION_EDITOR_FIND, ACTION_EDITOR_REPLACE, ACTION_EDITOR_FIND_NEXT, ACTION_EDITOR_FIND_PREV,
+        ACTION_EDITOR_FIND_NEXT, ACTION_EDITOR_FIND_PREV
 ];
 
 /// base for all editor widgets
@@ -247,9 +262,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     protected bool _replaceMode;
 
-    // TODO: move to styles
     protected uint _selectionColorFocused = 0xB060A0FF;
     protected uint _selectionColorNormal = 0xD060A0FF;
+    protected uint _searchHighlightColorCurrent = 0x808080FF;
+    protected uint _searchHighlightColorOther = 0xC08080FF;
     protected uint _leftPaneBackgroundColor = 0xF4F4F4;
     protected uint _leftPaneBackgroundColor2 = 0xFFFFFF;
     protected uint _leftPaneBackgroundColor3 = 0xF8F8F8;
@@ -319,7 +335,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     }
 
     void wrapLine(dstring line, int maxWidth) {
-        
+
     }
 
     /// information about line span into several lines - in word wrap mode
@@ -581,6 +597,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             new Action(EditorActions.Replace, KeyCode.KEY_H, KeyFlag.Control),
         ]);
         acceleratorMap.add(STD_EDITOR_ACTIONS);
+        acceleratorMap.add([ACTION_EDITOR_FIND_NEXT, ACTION_EDITOR_FIND_PREV]);
     }
 
     protected MenuItem _popupMenu;
@@ -590,7 +607,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         return this;
     }
 
-    /// 
+    ///
     override bool onMenuItemAction(const Action action) {
         return dispatchAction(action);
     }
@@ -639,7 +656,9 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case Replace:
                 return _content.multiline && !readOnly;
             case Find:
-                return true;
+            case FindNext:
+            case FindPrev:
+                return _content.multiline;
             default:
                 return super.isActionEnabled(action);
         }
@@ -745,7 +764,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         }
         return this;
     }
-    
+
     /// readonly flag (when true, user cannot change content of editor)
     @property bool readOnly() {
         return !enabled || _content.readOnly;
@@ -911,14 +930,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     override @property dstring text() { return _content.text; }
 
     /// set text
-    override @property Widget text(dstring s) { 
+    override @property Widget text(dstring s) {
         _content.text = s;
         requestLayout();
         return this;
     }
 
     /// set text
-    override @property Widget text(UIString s) { 
+    override @property Widget text(UIString s) {
         _content.text = s;
         requestLayout();
         return this;
@@ -1037,6 +1056,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _caretColorReplace = style.customColor("edit_caret_replace");
         _selectionColorFocused = style.customColor("editor_selection_focused");
         _selectionColorNormal = style.customColor("editor_selection_normal");
+        _searchHighlightColorCurrent = style.customColor("editor_search_highlight_current");
+        _searchHighlightColorOther = style.customColor("editor_search_highlight_other");
         _leftPaneBackgroundColor = style.customColor("editor_left_pane_background");
         _leftPaneBackgroundColor2 = style.customColor("editor_left_pane_background2");
         _leftPaneBackgroundColor3 = style.customColor("editor_left_pane_background3");
@@ -1147,6 +1168,20 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         requestActionsUpdate();
     }
 
+    protected dstring _textToHighlight;
+    protected uint _textToHighlightOptions;
+
+    /// text pattern to highlight - e.g. for search
+    @property dstring textToHighlight() {
+        return _textToHighlight;
+    }
+    /// set text to highlight -- e.g. for search
+    void setTextToHighlight(dstring pattern, uint textToHighlightOptions) {
+        _textToHighlight = pattern;
+        _textToHighlightOptions = textToHighlightOptions;
+        invalidate();
+    }
+
     protected void selectWordByMouse(int x, int y) {
         TextPosition oldCaretPos = _caretPos;
         TextPosition newPos = clientToTextPos(Point(x,y));
@@ -1202,6 +1237,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     protected bool _camelCasePartsAsWords = true;
 
+    void replaceSelectionText(dstring newText) {
+        EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [newText]);
+        _content.performOperation(op, this);
+        ensureCaretVisible();
+    }
+
     protected bool removeSelectionTextIfSelected() {
         if (_selectionRange.empty)
             return false;
@@ -1216,7 +1257,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     public dstring getSelectedText() {
         return getRangeText(_selectionRange);
     }
-    
+
     /// returns text for specified range (joined with LF when span over multiple lines)
     public dstring getRangeText(TextRange range) {
         dstring selectionText = concatDStrings(_content.rangeText(range));
@@ -1226,6 +1267,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     /// returns range for line with cursor
     @property public TextRange currentLineRange() {
         return _content.lineRange(_caretPos.line);
+    }
+
+    /// clears selection (don't change text, just unselect)
+    void clearSelection() {
+        _selectionRange = TextRange(_caretPos, _caretPos);
+        invalidate();
     }
 
     protected bool removeRangeText(TextRange range) {
@@ -1239,6 +1286,18 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         //_selectionRange.end = _caretPos;
         ensureCaretVisible();
         return true;
+    }
+
+    /// returns current selection range
+    @property TextRange selectionRange() {
+        return _selectionRange;
+    }
+    /// sets current selection range
+    @property void selectionRange(TextRange range) {
+        if (range.empty)
+            return;
+        _selectionRange = range;
+        _caretPos = range.end;
     }
 
     /// override to handle specific actions state (e.g. change enabled state for supported actions)
@@ -1359,6 +1418,9 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                         _caretPos.pos = space.firstNonSpaceIndex;
                     ensureCaretVisible();
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
+                    if (a.id == EditorActions.LineBegin && _caretPos == oldCaretPos) {
+                        clearSelection();
+                    }
                 }
                 return true;
             case DocumentEnd:
@@ -1376,6 +1438,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     _caretPos.pos = cast(int)currentLine.length;
                     ensureCaretVisible();
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
+                } else if (a.id == EditorActions.LineEnd) {
+                        clearSelection();
                 }
                 return true;
             case DelPrevWord:
@@ -1491,7 +1555,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                         return true;
                     if (_selectionRange.empty) {
                         if (useSpacesForTabs) {
-                            // insert one or more spaces to 
+                            // insert one or more spaces to
                             EditOperation op = new EditOperation(EditAction.Replace, TextRange(_caretPos, _caretPos), [spacesForTab(_caretPos.pos)]);
                             _content.performOperation(op, this);
                         } else {
@@ -1506,7 +1570,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                         } else {
                             // insert tab
                             if (useSpacesForTabs) {
-                                // insert one or more spaces to 
+                                // insert one or more spaces to
                                 EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [spacesForTab(_selectionRange.start.pos)]);
                                 _content.performOperation(op, this);
                             } else {
@@ -1560,12 +1624,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 replaceMode = !replaceMode;
                 return true;
             case SelectAll:
-                _selectionRange.start.line = 0;
-                _selectionRange.start.pos = 0;
-                _selectionRange.end = _content.lineEnd(_content.length - 1);
-                _caretPos = _selectionRange.end;
+                selectAll();
                 ensureCaretVisible();
-                requestActionsUpdate();
                 return true;
             case ToggleBookmark:
                 if (_content.multiline) {
@@ -1588,6 +1648,15 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 break;
         }
         return super.handleAction(a);
+    }
+
+    /// Select whole text
+    void selectAll() {
+        _selectionRange.start.line = 0;
+        _selectionRange.start.pos = 0;
+        _selectionRange.end = _content.lineEnd(_content.length - 1);
+        _caretPos = _selectionRange.end;
+        requestActionsUpdate();
     }
 
     protected TextRange spaceBefore(TextPosition pos) {
@@ -1741,7 +1810,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         //    return true;
         //}
         bool res = super.onKeyEvent(event);
-        if (focused) startCaretBlinking();
+        //if (focused) startCaretBlinking();
         return res;
     }
 
@@ -1874,10 +1943,16 @@ interface EditorActionHandler {
     bool onEditorAction(const Action action);
 }
 
+interface EnterKeyHandler {
+    bool onEnterKey(EditWidgetBase editor);
+}
+
 /// single line editor
 class EditLine : EditWidgetBase {
 
     Signal!EditorActionHandler editorAction;
+    /// handle Enter key press inside line editor
+    Signal!EnterKeyHandler enterKey;
 
     /// empty parameter list constructor - for usage by factory
     this() {
@@ -1899,7 +1974,7 @@ class EditLine : EditWidgetBase {
     protected dstring _measuredText;
     protected int[] _measuredTextWidths;
     protected Point _measuredTextSize;
-    
+
     protected Point _measuredTextToSetWidgetSize;
     protected dstring _textToSetWidgetSize = "aaaaa"d;
     protected int[] _measuredTextToSetWidgetSizeWidths;
@@ -1907,7 +1982,7 @@ class EditLine : EditWidgetBase {
     protected dchar _passwordChar = 0;
     /// password character - 0 for normal editor, some character, e.g. '*' to hide text by replacing all characters with this char
     @property dchar passwordChar() { return _passwordChar; }
-    @property EditLine passwordChar(dchar ch) { 
+    @property EditLine passwordChar(dchar ch) {
         if (_passwordChar != ch) {
             _passwordChar = ch;
             requestLayout();
@@ -1981,7 +2056,7 @@ class EditLine : EditWidgetBase {
         _measuredTextSize.y = font.height;
         return _measuredTextSize;
     }
-    
+
     protected Point measureTextToSetWidgetSize() {
         FontRef font = font();
         _measuredTextToSetWidgetSizeWidths.length = _textToSetWidgetSize.length;
@@ -1992,7 +2067,7 @@ class EditLine : EditWidgetBase {
     }
 
     /// measure
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         updateFontProps();
         measureVisibleText();
         measureTextToSetWidgetSize();
@@ -2026,6 +2101,16 @@ class EditLine : EditWidgetBase {
 
     /// handle keys
     override bool onKeyEvent(KeyEvent event) {
+        if (enterKey.assigned) {
+            if (event.keyCode == KeyCode.RETURN && event.modifiers == 0) {
+                if (event.action == KeyAction.KeyDown)
+                    return true;
+                if (event.action == KeyAction.KeyUp) {
+                    if (enterKey(this))
+                       return true;
+                }
+            }
+        }
         return super.onKeyEvent(event);
     }
 
@@ -2142,8 +2227,8 @@ class EditBox : EditWidgetBase {
     protected int[] _visibleLinesWidths; // width (in pixels) of visible lines
     protected CustomCharProps[][] _visibleLinesHighlights;
     protected CustomCharProps[][] _visibleLinesHighlightsBuf;
-    
-    protected Point _measuredTextToSetWidgetSize; 
+
+    protected Point _measuredTextToSetWidgetSize;
     protected dstring _textToSetWidgetSize = "aaaaa/naaaaa"d;
     protected int[] _measuredTextToSetWidgetSizeWidths;
 
@@ -2196,7 +2281,7 @@ class EditBox : EditWidgetBase {
             _findPanel.layout(Rect(rc.left, rc.bottom - findPanelHeight, rc.right, rc.bottom));
             contentRc.bottom -= findPanelHeight;
         }
-        
+
         super.layout(contentRc);
         if (_contentChanged) {
             measureVisibleText();
@@ -2251,9 +2336,73 @@ class EditBox : EditWidgetBase {
         return sz;
     }
 
+    protected bool _extendRightScrollBound = true;
+    /// override to determine if scrollbars are needed or not
+    override protected void checkIfScrollbarsNeeded(ref bool needHScroll, ref bool needVScroll) {
+        needHScroll = _hscrollbar && (_hscrollbarMode == ScrollBarMode.Visible || _hscrollbarMode == ScrollBarMode.Auto);
+        needVScroll = _vscrollbar && (_vscrollbarMode == ScrollBarMode.Visible || _vscrollbarMode == ScrollBarMode.Auto);
+        if (!needHScroll && !needVScroll)
+            return; // not needed
+        if (_hscrollbarMode != ScrollBarMode.Auto && _vscrollbarMode != ScrollBarMode.Auto)
+            return; // no auto scrollbars
+        // either h or v scrollbar is in auto mode
+
+        int hsbHeight = _hscrollbar.measuredHeight;
+        int vsbWidth = _hscrollbar.measuredWidth;
+
+        int visibleLines = _lineHeight > 0 ? (_clientRect.height / _lineHeight) : 1; // fully visible lines
+        if (visibleLines < 1)
+            visibleLines = 1;
+        int visibleLinesWithScrollbar = _lineHeight > 0 ? ((_clientRect.height - hsbHeight) / _lineHeight) : 1; // fully visible lines
+        if (visibleLinesWithScrollbar < 1)
+            visibleLinesWithScrollbar = 1;
+
+        // either h or v scrollbar is in auto mode
+        //Point contentSize = fullContentSize();
+        int contentWidth = _maxLineWidth + (_extendRightScrollBound ? _clientRect.width / 16 : 0);
+        int contentHeight = _content.length;
+
+        int clientWidth = _clientRect.width;
+        int clientHeight = visibleLines;
+
+        int clientWidthWithScrollbar = clientWidth - vsbWidth;
+        int clientHeightWithScrollbar = visibleLinesWithScrollbar;
+
+        if (_hscrollbarMode == ScrollBarMode.Auto && _vscrollbarMode == ScrollBarMode.Auto) {
+            // both scrollbars in auto mode
+            bool xFits = contentWidth <= clientWidth;
+            bool yFits = contentHeight <= clientHeight;
+            if (!xFits && !yFits) {
+                // none fits, need both scrollbars
+            } else if (xFits && yFits) {
+                // everything fits!
+                needHScroll = false;
+                needVScroll = false;
+            } else if (xFits) {
+                // only X fits
+                if (contentWidth <= clientWidthWithScrollbar)
+                    needHScroll = false; // disable hscroll
+            } else { // yFits
+                // only Y fits
+                if (contentHeight <= clientHeightWithScrollbar)
+                    needVScroll = false; // disable vscroll
+            }
+        } else if (_hscrollbarMode == ScrollBarMode.Auto) {
+            // only hscroll is in auto mode
+            if (needVScroll)
+                clientWidth = clientWidthWithScrollbar;
+            needHScroll = contentWidth > clientWidth;
+        } else {
+            // only vscroll is in auto mode
+            if (needHScroll)
+                clientHeight = clientHeightWithScrollbar;
+            needVScroll = contentHeight > clientHeight;
+        }
+    }
+
     /// update horizontal scrollbar widget position
     override protected void updateHScrollBar() {
-        _hscrollbar.setRange(0, _maxLineWidth + _clientRect.width / 4);
+        _hscrollbar.setRange(0, _maxLineWidth + (_extendRightScrollBound ? _clientRect.width / 16 : 0));
         _hscrollbar.pageSize = _clientRect.width;
         _hscrollbar.position = _scrollPos.x;
     }
@@ -2263,7 +2412,7 @@ class EditBox : EditWidgetBase {
         int visibleLines = _lineHeight ? _clientRect.height / _lineHeight : 1; // fully visible lines
         if (visibleLines < 1)
             visibleLines = 1;
-        _vscrollbar.setRange(0, _content.length - 1);
+        _vscrollbar.setRange(0, _content.length);
         _vscrollbar.pageSize = visibleLines;
         _vscrollbar.position = _firstVisibleLine;
     }
@@ -2639,10 +2788,16 @@ class EditBox : EditWidgetBase {
                 }
                 return true;
             case Find:
-                createFindPanel(false, false);
+                openFindPanel();
+                return true;
+            case FindNext:
+                findNext(false);
+                return true;
+            case FindPrev:
+                findNext(true);
                 return true;
             case Replace:
-                createFindPanel(false, true);
+                openReplacePanel();
                 return true;
             default:
                 break;
@@ -2652,10 +2807,12 @@ class EditBox : EditWidgetBase {
 
     /// calculate full content size in pixels
     override Point fullContentSize() {
-        Point textSz = measureVisibleText();
-        int maxy = _lineHeight * 5; // limit measured height
-        if (textSz.y > maxy)
-            textSz.y = maxy;
+        Point textSz;
+        textSz.y = _lineHeight * _content.length;
+        textSz.x = _maxLineWidth;
+        //int maxy = _lineHeight * 5; // limit measured height
+        //if (textSz.y > maxy)
+        //    textSz.y = maxy;
         return textSz;
     }
 
@@ -2668,9 +2825,9 @@ class EditBox : EditWidgetBase {
         _measuredTextToSetWidgetSize.y = font.height;
         return _measuredTextToSetWidgetSize;
     }
-    
+
     /// measure
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measure(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone) {
             return;
         }
@@ -2687,6 +2844,150 @@ class EditBox : EditWidgetBase {
         super.measure(parentWidth, parentHeight);
     }
 
+
+    protected void highlightTextPattern(DrawBuf buf, int lineIndex, Rect lineRect, Rect visibleRect) {
+        dstring pattern = _textToHighlight;
+        uint options = _textToHighlightOptions;
+        if (!pattern.length) {
+            // support highlighting selection text - if whole word is selected
+            if (_selectionRange.empty || !_selectionRange.singleLine)
+                return;
+            if (_selectionRange.start.line >= _content.length)
+                return;
+            dstring selLine = _content.line(_selectionRange.start.line);
+            int start = _selectionRange.start.pos;
+            int end = _selectionRange.end.pos;
+            if (start >= selLine.length)
+                return;
+            pattern = selLine[start .. end];
+            if (!isWordChar(pattern[0]) || !isWordChar(pattern[$-1]))
+                return;
+            if (!isWholeWord(selLine, start, end))
+                return;
+            // whole word is selected - enable highlight for it
+            options = TextSearchFlag.CaseSensitive | TextSearchFlag.WholeWords;
+        }
+        if (!pattern.length)
+            return;
+        dstring lineText = _content.line(lineIndex);
+        if (lineText.length < pattern.length)
+            return;
+        ptrdiff_t start = 0;
+        import std.string : indexOf, CaseSensitive, Yes, No;
+        bool caseSensitive = (options & TextSearchFlag.CaseSensitive) != 0;
+        bool wholeWords = (options & TextSearchFlag.WholeWords) != 0;
+        bool selectionOnly = (options & TextSearchFlag.SelectionOnly) != 0;
+        for (;;) {
+            ptrdiff_t pos = lineText[start .. $].indexOf(pattern, caseSensitive ? Yes.caseSensitive : No.caseSensitive);
+            if (pos < 0)
+                break;
+            // found text to highlight
+            start += pos;
+            if (!wholeWords || isWholeWord(lineText, start, start + pattern.length)) {
+                TextRange r = TextRange(TextPosition(lineIndex, cast(int)start), TextPosition(lineIndex, cast(int)(start + pattern.length)));
+                uint color = r.isInsideOrNext(caretPos) ? _searchHighlightColorCurrent : _searchHighlightColorOther;
+                highlightLineRange(buf, lineRect, color, r);
+            }
+            start += pattern.length;
+        }
+    }
+
+    static bool isWordChar(dchar ch) {
+        if (ch >= 'a' && ch <= 'z')
+            return true;
+        if (ch >= 'A' && ch <= 'Z')
+            return true;
+        if (ch == '_')
+            return true;
+        return false;
+    }
+    static bool isValidWordBound(dchar innerChar, dchar outerChar) {
+        return !isWordChar(innerChar) || !isWordChar(outerChar);
+    }
+    /// returns true if selected range of string is whole word
+    static bool isWholeWord(dstring lineText, size_t start, size_t end) {
+        if (start >= lineText.length || start >= end)
+            return false;
+        if (start > 0 && !isValidWordBound(lineText[start], lineText[start - 1]))
+            return false;
+        if (end > 0 && end < lineText.length && !isValidWordBound(lineText[end - 1], lineText[end]))
+            return false;
+        return true;
+    }
+
+    /// find all occurences of text pattern in content; options = bitset of TextSearchFlag
+    TextRange[] findAll(dstring pattern, uint options) {
+        TextRange[] res;
+        res.assumeSafeAppend();
+        if (!pattern.length)
+            return res;
+        import std.string : indexOf, CaseSensitive, Yes, No;
+        bool caseSensitive = (options & TextSearchFlag.CaseSensitive) != 0;
+        bool wholeWords = (options & TextSearchFlag.WholeWords) != 0;
+        bool selectionOnly = (options & TextSearchFlag.SelectionOnly) != 0;
+        for (int i = 0; i < _content.length; i++) {
+            dstring lineText = _content.line(i);
+            if (lineText.length < pattern.length)
+                continue;
+            ptrdiff_t start = 0;
+            for (;;) {
+                ptrdiff_t pos = lineText[start .. $].indexOf(pattern, caseSensitive ? Yes.caseSensitive : No.caseSensitive);
+                if (pos < 0)
+                    break;
+                // found text to highlight
+                start += pos;
+                if (!wholeWords || isWholeWord(lineText, start, start + pattern.length)) {
+                    TextRange r = TextRange(TextPosition(i, cast(int)start), TextPosition(i, cast(int)(start + pattern.length)));
+                    res ~= r;
+                }
+                start += _textToHighlight.length;
+            }
+        }
+        return res;
+    }
+
+    /// find next occurence of text pattern in content, returns true if found
+    bool findNextPattern(ref TextPosition pos, dstring pattern, uint searchOptions, int direction) {
+        TextRange[] all = findAll(pattern, searchOptions);
+        if (!all.length)
+            return false;
+        int currentIndex = -1;
+        int nearestIndex = cast(int)all.length;
+        for (int i = 0; i < all.length; i++) {
+            if (all[i].isInsideOrNext(pos)) {
+                currentIndex = i;
+                break;
+            }
+        }
+        for (int i = 0; i < all.length; i++) {
+            if (pos < all[i].start) {
+                nearestIndex = i;
+                break;
+            }
+            if (pos > all[i].end) {
+                nearestIndex = i + 1;
+            }
+        }
+        if (currentIndex >= 0) {
+            if (all.length < 2 && direction != 0)
+                return false;
+            currentIndex += direction;
+            if (currentIndex < 0)
+                currentIndex = cast(int)all.length - 1;
+            else if (currentIndex >= all.length)
+                currentIndex = 0;
+            pos = all[currentIndex].start;
+            return true;
+        }
+        if (direction < 0)
+            nearestIndex--;
+        if (nearestIndex < 0)
+            nearestIndex = cast(int)all.length - 1;
+        else if (nearestIndex >= all.length)
+            nearestIndex = 0;
+        pos = all[nearestIndex].start;
+        return true;
+    }
 
     protected void highlightLineRange(DrawBuf buf, Rect lineRect, uint color, TextRange r) {
         Rect startrc = textPosToClient(r.start);
@@ -2720,6 +3021,8 @@ class EditBox : EditWidgetBase {
                 buf.fillRect(rc, focused ? _selectionColorFocused : _selectionColorNormal);
             }
         }
+
+        highlightTextPattern(buf, lineIndex, lineRect, visibleRect);
 
         if (_matchingBraces.start.line == lineIndex)  {
             TextRange r = TextRange(_matchingBraces.start, _matchingBraces.start.offset(1));
@@ -2770,7 +3073,7 @@ class EditBox : EditWidgetBase {
         destroy(_tokenHighlightColors);
     }
 
-    /** 
+    /**
         Custom text color and style highlight (using text highlight) support.
 
         Return null if no syntax highlight required for line.
@@ -2812,9 +3115,9 @@ class EditBox : EditWidgetBase {
     bool _showWhiteSpaceMarks;
     /// when true, show marks for tabs and spaces at beginning and end of line, and tabs inside line
     @property bool showWhiteSpaceMarks() const { return _showWhiteSpaceMarks; }
-    @property void showWhiteSpaceMarks(bool show) { 
+    @property void showWhiteSpaceMarks(bool show) {
         if (_showWhiteSpaceMarks != show) {
-            _showWhiteSpaceMarks = show; 
+            _showWhiteSpaceMarks = show;
             invalidate();
         }
     }
@@ -2875,7 +3178,8 @@ class EditBox : EditWidgetBase {
                 lastNonSpace = i + 1;
             }
         }
-        if (firstNonSpace <= 0 && lastNonSpace >= txt.length && !hasTabs)
+        bool spacesOnly = txt.length > 0 && firstNonSpace < 0;
+        if (firstNonSpace <= 0 && lastNonSpace >= txt.length && !hasTabs && !spacesOnly)
             return;
         uint color = addAlpha(textColor, 0xC0);
         static int[] textSizeBuffer;
@@ -2888,7 +3192,7 @@ class EditBox : EditWidgetBase {
         int spaceIndex = 0;
         for (int i = 0; i < txt.length && i < charsMeasured; i++) {
             dchar ch = txt[i];
-            bool outsideText = (i < firstNonSpace || i >= lastNonSpace);
+            bool outsideText = (i < firstNonSpace || i >= lastNonSpace || spacesOnly);
             if ((ch == ' ' && outsideText) || ch == '\t') {
                 Rect rc = lineRect;
                 rc.left = lineRect.left + (i > 0 ? textSizeBuffer[i - 1] : 0);
@@ -3004,20 +3308,75 @@ class EditBox : EditWidgetBase {
 
     protected FindPanel _findPanel;
 
-    /// create find panel
-    protected void createFindPanel(bool selectionOnly, bool replaceMode) {
-        _findPanel = new FindPanel(selectionOnly, replaceMode);
-        addChild(_findPanel);
+    dstring selectionText(bool singleLineOnly = false) {
+        TextRange range = _selectionRange;
+        if (range.empty) {
+            return null;
+        }
+        dstring res = getRangeText(range);
+        if (singleLineOnly) {
+            for (int i = 0; i < res.length; i++) {
+                if (res[i] == '\n') {
+                    res = res[0 .. i];
+                    break;
+                }
+            }
+        }
+        return res;
+    }
+
+    protected void findNext(bool backward) {
+        createFindPanel(false, false);
+        _findPanel.findNext(backward);
+        // don't change replace mode
+    }
+
+    protected void openFindPanel() {
+        createFindPanel(false, false);
+        _findPanel.replaceMode = false;
+        _findPanel.activate();
+    }
+
+    protected void openReplacePanel() {
+        createFindPanel(false, true);
+        _findPanel.replaceMode = true;
+        _findPanel.activate();
+    }
+
+    /// create find panel; returns true if panel was not yet visible
+    protected bool createFindPanel(bool selectionOnly, bool replaceMode) {
+        bool res = false;
+        dstring txt = selectionText(true);
+        if (!_findPanel) {
+            _findPanel = new FindPanel(this, selectionOnly, replaceMode, txt);
+            addChild(_findPanel);
+            res = true;
+        } else {
+            if (_findPanel.visibility != Visibility.Visible) {
+                _findPanel.visibility = Visibility.Visible;
+                if (txt.length)
+                    _findPanel.searchText = txt;
+                res = true;
+            }
+        }
+        if (!pos.empty)
+            layout(pos);
         requestLayout();
+        return res;
     }
 
     /// close find panel
-    protected void closeFindPanel() {
+    protected void closeFindPanel(bool hideOnly = true) {
         if (_findPanel) {
-            removeChild(_findPanel);
-            destroy(_findPanel);
-            _findPanel = null;
-            requestLayout();
+            setFocus();
+            if (hideOnly) {
+                _findPanel.visibility = Visibility.Gone;
+            } else {
+                removeChild(_findPanel);
+                destroy(_findPanel);
+                _findPanel = null;
+                requestLayout();
+            }
         }
     }
 
@@ -3113,6 +3472,7 @@ class LogWidget : EditBox {
 }
 
 class FindPanel : HorizontalLayout {
+    protected EditBox _editor;
     protected EditLine _edFind;
     protected EditLine _edReplace;
     protected ImageCheckButton _cbCaseSensitive;
@@ -3121,8 +3481,28 @@ class FindPanel : HorizontalLayout {
     protected Button _btnFindNext;
     protected Button _btnFindPrev;
     protected Button _btnReplace;
+    protected Button _btnReplaceAndFind;
     protected Button _btnReplaceAll;
-    this(bool selectionOnly, bool replace) {
+    protected ImageButton _btnClose;
+    protected bool _replaceMode;
+    /// returns true if panel is working in replace mode
+    @property bool replaceMode() { return _replaceMode; }
+    @property FindPanel replaceMode(bool newMode) { 
+        if (newMode != _replaceMode) {
+            _replaceMode = newMode;
+            childById("replace").visibility = newMode ? Visibility.Visible : Visibility.Gone;
+        }
+        return this;
+    }
+    @property dstring searchText() {
+        return _edFind.text;
+    }
+    @property FindPanel searchText(dstring newText) {
+        _edFind.text = newText;
+        return this;
+    }
+    this(EditBox editor, bool selectionOnly, bool replace, dstring initialText = ""d) {
+        _replaceMode = replace;
         import dlangui.dml.parser;
         try {
             parseML(q{
@@ -3135,25 +3515,28 @@ class FindPanel : HorizontalLayout {
                             EditLine { id: edFind; layoutWidth: fill; alignment: vcenter }
                             Button { id: btnFindNext; text: EDIT_FIND_NEXT }
                             Button { id: btnFindPrev; text: EDIT_FIND_PREV }
+                            VerticalLayout {
+                                VSpacer {}
+                                HorizontalLayout {
+                                    ImageCheckButton { id: cbCaseSensitive; drawableId: "find_case_sensitive"; tooltipText: EDIT_FIND_CASE_SENSITIVE; styleId: TOOLBAR_BUTTON; alignment: vcenter }
+                                    ImageCheckButton { id: cbWholeWords; drawableId: "find_whole_words"; tooltipText: EDIT_FIND_WHOLE_WORDS; styleId: TOOLBAR_BUTTON; alignment: vcenter }
+                                    CheckBox { id: cbSelection; text: "Sel" }
+                                }
+                                VSpacer {}
+                            }
                         }
                         HorizontalLayout {
                             id: replace
                             layoutWidth: fill;
                             EditLine { id: edReplace; layoutWidth: fill; alignment: vcenter }
                             Button { id: btnReplace; text: EDIT_REPLACE_NEXT }
+                            Button { id: btnReplaceAndFind; text: EDIT_REPLACE_AND_FIND }
                             Button { id: btnReplaceAll; text: EDIT_REPLACE_ALL }
                         }
                     }
                     VerticalLayout {
-                        HorizontalLayout {
-                            ImageCheckButton { id: cbCaseSensitive; drawableId: "find_case_sensitive"; tooltipText: EDIT_FIND_CASE_SENSITIVE; styleId: TOOLBAR_BUTTON; alignment: vcenter }
-                            ImageCheckButton { id: cbWholeWords; drawableId: "find_whole_words"; tooltipText: EDIT_FIND_WHOLE_WORDS; styleId: TOOLBAR_BUTTON; alignment: vcenter }
-                            CheckBox { id: cbSelection; text: "Sel" }
-                        }
                         VSpacer {}
-                    }
-                    VerticalLayout {
-                        ImageButton { id: btnClose; drawableId: "close"; styleId: BUTTON_TRANSPARENT }
+                        ImageButton { id: btnClose; drawableId: close; styleId: BUTTON_TRANSPARENT }
                         VSpacer {}
                     }
                 }
@@ -3161,18 +3544,214 @@ class FindPanel : HorizontalLayout {
         } catch (Exception e) {
             Log.e("Exception while parsing DML: ", e);
         }
+        _editor = editor;
         _edFind = childById!EditLine("edFind");
         _edReplace = childById!EditLine("edReplace");
+
+        if (initialText.length) {
+            _edFind.text = initialText;
+            _edReplace.text = initialText;
+        }
+
+        _edFind.editorAction.connect(&onFindEditorAction);
+        _edFind.contentChange.connect(&onFindTextChange);
+
+        //_edFind.keyEvent = &onEditorKeyEvent;
+        //_edReplace.keyEvent = &onEditorKeyEvent;
+
         _btnFindNext = childById!Button("btnFindNext");
+        _btnFindNext.click = &onButtonClick;
         _btnFindPrev = childById!Button("btnFindPrev");
+        _btnFindPrev.click = &onButtonClick;
         _btnReplace = childById!Button("btnReplace");
+        _btnReplace.click = &onButtonClick;
+        _btnReplaceAndFind = childById!Button("btnReplaceAndFind");
+        _btnReplaceAndFind.click = &onButtonClick;
         _btnReplaceAll = childById!Button("btnReplaceAll");
+        _btnReplaceAll.click = &onButtonClick;
+        _btnClose = childById!ImageButton("btnClose");
+        _btnClose.click = &onButtonClick;
         _cbCaseSensitive = childById!ImageCheckButton("cbCaseSensitive");
         _cbWholeWords = childById!ImageCheckButton("cbWholeWords");
         _cbSelection =  childById!CheckBox("cbSelection");
+        _cbCaseSensitive.checkChange = &onCaseSensitiveCheckChange;
+        _cbWholeWords.checkChange = &onCaseSensitiveCheckChange;
+        _cbSelection.checkChange = &onCaseSensitiveCheckChange;
+        focusGroup = true;
         if (!replace)
             childById("replace").visibility = Visibility.Gone;
         //_edFind = new EditLine("edFind"
+        dstring currentText = _edFind.text;
+        Log.d("currentText=", currentText);
+        setDirection(false);
+        updateHighlight();
+    }
+    void activate() {
+        _edFind.setFocus();
+        dstring currentText = _edFind.text;
+        Log.d("activate.currentText=", currentText);
+        _edFind.setCaretPos(0, cast(int)currentText.length, true);
+    }
+
+    bool onButtonClick(Widget source) {
+        switch (source.id) {
+            case "btnFindNext":
+                findNext(false);
+                return true;
+            case "btnFindPrev":
+                findNext(true);
+                return true;
+            case "btnClose":
+                close();
+                return true;
+            case "btnReplace":
+                replaceOne();
+                return true;
+            case "btnReplaceAndFind":
+                replaceOne();
+                findNext(_backDirection);
+                return true;
+            case "btnReplaceAll":
+                replaceAll();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    void close() {
+        _editor.setTextToHighlight(null, 0);
+        _editor.closeFindPanel();
+    }
+
+    override bool onKeyEvent(KeyEvent event) {
+        if (event.keyCode == KeyCode.TAB)
+            return super.onKeyEvent(event);
+        if (event.action == KeyAction.KeyDown && event.keyCode == KeyCode.ESCAPE) {
+            close();
+            return true;
+        }
+        return true;
+    }
+
+    /// override to handle specific actions
+    override bool handleAction(const Action a) {
+        switch (a.id) {
+            case EditorActions.FindNext:
+                findNext(false);
+                return true;
+            case EditorActions.FindPrev:
+                findNext(true);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    protected bool _backDirection;
+    void setDirection(bool back) {
+        _backDirection = back;
+        if (back) {
+            _btnFindNext.resetState(State.Default);
+            _btnFindPrev.setState(State.Default);
+        } else {
+            _btnFindNext.setState(State.Default);
+            _btnFindPrev.resetState(State.Default);
+        }
+    }
+
+    uint makeSearchFlags() {
+        uint res = 0;
+        if (_cbCaseSensitive.checked)
+            res |= TextSearchFlag.CaseSensitive;
+        if (_cbWholeWords.checked)
+            res |= TextSearchFlag.WholeWords;
+        if (_cbSelection.checked)
+            res |= TextSearchFlag.SelectionOnly;
+        return res;
+    }
+    bool findNext(bool back) {
+        setDirection(back);
+        dstring currentText = _edFind.text;
+        Log.d("findNext text=", currentText, " back=", back);
+        if (!currentText.length)
+            return false;
+        _editor.setTextToHighlight(currentText, makeSearchFlags);
+        TextPosition pos = _editor.caretPos;
+        bool res = _editor.findNextPattern(pos, currentText, makeSearchFlags, back ? -1 : 1);
+        if (res) {
+            _editor.selectionRange = TextRange(pos, TextPosition(pos.line, pos.pos + cast(int)currentText.length));
+            _editor.ensureCaretVisible();
+            //_editor.setCaretPos(pos.line, pos.pos, true);
+        }
+        return res;
+    }
+
+    bool replaceOne() {
+        dstring currentText = _edFind.text;
+        dstring newText = _edReplace.text;
+        Log.d("replaceOne text=", currentText, " back=", _backDirection, " newText=", newText);
+        if (!currentText.length)
+            return false;
+        _editor.setTextToHighlight(currentText, makeSearchFlags);
+        TextPosition pos = _editor.caretPos;
+        bool res = _editor.findNextPattern(pos, currentText, makeSearchFlags, 0);
+        if (res) {
+            _editor.selectionRange = TextRange(pos, TextPosition(pos.line, pos.pos + cast(int)currentText.length));
+            _editor.replaceSelectionText(newText);
+            _editor.selectionRange = TextRange(pos, TextPosition(pos.line, pos.pos + cast(int)newText.length));
+            _editor.ensureCaretVisible();
+            //_editor.setCaretPos(pos.line, pos.pos, true);
+        }
+        return res;
+    }
+
+    int replaceAll() {
+        int count = 0;
+        for(int i = 0; ; i++) {
+            debug Log.d("replaceAll - calling replaceOne, iteration ", i);
+            if (!replaceOne())
+                break;
+            count++;
+            TextPosition initialPosition = _editor.caretPos;
+            debug Log.d("replaceAll - position is ", initialPosition);
+            if (!findNext(_backDirection))
+                break;
+            TextPosition newPosition = _editor.caretPos;
+            debug Log.d("replaceAll - next position is ", newPosition);
+            if (_backDirection && newPosition >= initialPosition)
+                break;
+            if (!_backDirection && newPosition <= initialPosition)
+                break;
+        }
+        debug Log.d("replaceAll - done, replace count = ", count);
+        _editor.ensureCaretVisible();
+        return count;
+    }
+
+    void updateHighlight() {
+        dstring currentText = _edFind.text;
+        Log.d("onFindTextChange.currentText=", currentText);
+        _editor.setTextToHighlight(currentText, makeSearchFlags);
+    }
+
+    void onFindTextChange(EditableContent source) {
+        Log.d("onFindTextChange");
+        updateHighlight();
+    }
+
+    bool onCaseSensitiveCheckChange(Widget source, bool checkValue) {
+        updateHighlight();
+        return true;
+    }
+
+    bool onFindEditorAction(const Action action) {
+        Log.d("onFindEditorAction ", action);
+        if (action.id == EditorActions.InsertNewLine) {
+            findNext(_backDirection);
+            return true;
+        }
+        return false;
     }
 }
 
