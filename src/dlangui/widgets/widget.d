@@ -575,9 +575,6 @@ public:
     @property Widget text(dstring s) { return this; }
     /// sets widget content text (override to support this)
     @property Widget text(UIString s) { return this; }
-    
-    /// override to handle font changes
-    protected void handleFontChanged() {}
 
     /// override to handle font changes
     protected void handleFontChanged() {}
