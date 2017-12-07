@@ -187,6 +187,13 @@ class DockHost : WidgetGroupDefaultDrawing {
         _bodyWidget.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
         _bodyWidget.parent = this;
     }
+    
+    protected ubyte _dockKeyFlags;
+    enum DockKeyFlag : ubyte {
+      isLeft = 1,
+      isTop = 2,
+      isVertical = 4,
+    }
 
     void addDockedWindow(DockWindow dockWin) {
         addChild(dockWin);
@@ -303,6 +310,60 @@ class DockHost : WidgetGroupDefaultDrawing {
         }
         measuredContent(parentWidth, parentHeight, sz.x, sz.y);
     }
+    
+    override bool onKeyEvent(KeyEvent event)
+    {
+      if (event.keyCode == KeyCode.LEFT && event.modifiers == (KeyFlag.Shift | KeyFlag.Alt)) {
+            if (event.action == KeyAction.KeyDown) {
+                Log.d("keydown");
+                auto newRC = _leftSpace._rc.width - 1;
+                _leftSpace.resizer.resizeEvent(
+                _leftSpace.resizer, ResizerEventType.Dragging, _leftSpace.resizer.orientation == Orientation.Vertical ? newRC : newRC);
+                requestLayout();
+            } else if (event.action == KeyAction.KeyUp) {
+                Log.d("keyup", _leftSpace._rc.width);
+            }
+            return true;
+      }
+      if (event.keyCode == KeyCode.RIGHT && event.modifiers == (KeyFlag.Shift | KeyFlag.Alt)) {
+      if (event.action == KeyAction.KeyDown) {
+                Log.d("keydown");
+                auto newRC = _leftSpace._rc.width + 1;
+                _leftSpace.resizer.resizeEvent(
+                _leftSpace.resizer, ResizerEventType.Dragging, _leftSpace.resizer.orientation == Orientation.Vertical ? newRC : newRC);
+                requestLayout();
+            } else if (event.action == KeyAction.KeyUp) {
+                Log.d("keyup", _leftSpace._rc.width);
+            }
+            return true;
+      }
+      if (event.keyCode == KeyCode.UP && event.modifiers == (KeyFlag.Shift | KeyFlag.Alt)) {
+            if (event.action == KeyAction.KeyDown) {
+                Log.d("keydown");
+                auto newRC = _topSpace._rc.height - 1;
+                _topSpace.resizer.resizeEvent(
+                _topSpace.resizer, ResizerEventType.Dragging, _topSpace.resizer.orientation == Orientation.Vertical ? newRC : newRC);
+                requestLayout();
+            } else if (event.action == KeyAction.KeyUp) {
+                Log.d("keyup", _topSpace._rc.width);
+            }
+            return true;
+      }
+      if (event.keyCode == KeyCode.DOWN && event.modifiers == (KeyFlag.Shift | KeyFlag.Alt)) {
+      if (event.action == KeyAction.KeyDown) {
+                Log.d("keydown");
+                auto newRC = _topSpace._rc.height + 1;
+                _topSpace.resizer.resizeEvent(
+                _topSpace.resizer, ResizerEventType.Dragging, _topSpace.resizer.orientation == Orientation.Vertical ? newRC : newRC);
+                requestLayout();
+            } else if (event.action == KeyAction.KeyUp) {
+                Log.d("keyup", _topSpace._rc.width);
+            }
+            return true;
+      }
+      return false;
+    }
+    
 }
 
 /// docked window
