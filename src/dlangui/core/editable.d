@@ -450,6 +450,8 @@ struct LineSpan {
     int start;
     /// number of lines it spans
     int len;
+    /// the wrapped line
+    dstring[] wrappedContent;
 }
 
 /// interface for custom syntax highlight, comments toggling, smart indents, and other language dependent features for source code editors

@@ -37,6 +37,9 @@ import dlangui.graphics.colors;
 public import dlangui.core.editable;
 
 import std.algorithm;
+import std.ascii;
+import std.conv;
+import std.string;
 import dlangui.core.streams;
 
 /// Modified state change listener
@@ -391,10 +394,127 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         return this;
     }
 
-    void wrapLine(dstring line, int maxWidth) {
+    protected int maxWrappedLines;
+    
+    dchar[] splitChars = [' ', '-', '\t'];
+    
+    dstring[] wrapLine(dstring str, int maxWidth) {
+        //Log.d("Input: ", str);
+        dstring[] words = explode(str, splitChars);
+        int curLineLength = 0;
+        dchar[] buildingStr;
+        dstring[] buildingStrArr;
+        int wrappedLineCount = 0;
+        int curLineWidth = 0;
+        maxWidth = _clientRect.width;
+        for (int i = 0; i < words.length; i++)
+        {
+            dstring word = words[i];
+            if (curLineWidth + measureWrappedText(word) > maxWidth)
+            {
+                if (curLineWidth > 0)
+                {
+                    //buildingStr ~= '\n';
+                    buildingStrArr ~= to!dstring(buildingStr);
+                    wrappedLineCount++;
+                    curLineLength = 0;
+                    curLineWidth = 0;
+                    buildingStr = [];
+                    //Log.d("Output1: ", buildingStrArr);
+                }
+                while (measureWrappedText(word) > maxWidth)
+                {
+                    //buildingStr ~= word[0 .. maxWidth - 1] ~ "-";
+                    int wrapPoint = findWrapPoint(word);
+                    buildingStr ~= word[0 .. wrapPoint - 1] ~ "-";
+                    word = word[wrapPoint - 1 .. $];
 
+                    buildingStrArr ~= to!dstring(buildingStr);
+                    //Log.d("Output2: ", buildingStrArr);
+                    buildingStr = [];
+                    wrappedLineCount++;
+                    //buildingStr ~= '\n';
+                }
+                word = stripLeft(word);
+            }
+            buildingStr ~= word;
+            //Log.d(buildingStr);
+            curLineLength += to!int(word.length);
+            curLineWidth += measureWrappedText(word);
+        }
+        buildingStrArr ~= to!dstring(buildingStr);
+        //Log.d("Output: ", buildingStrArr);
+        _span ~= LineSpan(to!int(_span.length + 1), wrappedLineCount + 1, buildingStrArr);
+        //return to!dstring(buildingStr);
+        return buildingStrArr;
+    }
+    
+    int measureWrappedText(dstring text)
+    {
+        FontRef font = font();
+        static int[dchar] miniGlyphCache;
+        int accumulativeWidth = 0;
+        int* charWidth;
+        for (int i; i < text.length; i++)
+        {
+            dchar curChar = text[i];
+            charWidth = (curChar in miniGlyphCache);
+            if (charWidth is null)
+            {
+                miniGlyphCache[curChar] = font.get.charWidth(curChar);
+            }
+            accumulativeWidth += miniGlyphCache[curChar];
+        }
+        return accumulativeWidth;
+    }
+    
+    int findWrapPoint(dstring text)
+    {
+        int maxWidth = _clientRect.width;
+        int wrapPoint = 0;
+        while (true)
+        {
+            if (measureWrappedText(text[0 .. wrapPoint]) < maxWidth)
+            {
+                wrapPoint++;
+            }
+            else
+            {
+                return wrapPoint;
+            }
+        }
     }
 
+    dstring[] explode(dstring str, dchar[] splitChars)
+    {
+        dstring[] parts;
+        int startIndex = 0;
+        while (true)
+        {
+            int index = to!int(str.indexOfAny(splitChars, startIndex));
+        
+            if (index == -1)
+            {
+                parts ~= str[startIndex .. $];
+                return parts;
+            }
+        
+            dstring word = str[startIndex .. index];
+            dchar nextChar = (str[index .. index + 1])[0];
+        
+            if (isWhite(nextChar))
+            {
+                parts ~= word;
+                parts ~= to!dstring(nextChar);
+            }
+            else
+            {
+                parts ~= word ~ nextChar;
+            }
+            startIndex = index + 1;
+        }
+    }
+    
     /// information about line span into several lines - in word wrap mode
     protected LineSpan[] _span;
 
@@ -3320,6 +3440,11 @@ class EditBox : EditWidgetBase {
             }
         }
     }
+    
+    void resetSpan()
+    {
+        _span = [];
+    }
 
     override protected void drawClient(DrawBuf buf) {
         // update matched braces
@@ -3329,7 +3454,8 @@ class EditBox : EditWidgetBase {
         }
 
         Rect rc = _clientRect;
-
+        resetSpan();
+        
         FontRef font = font();
         for (int i = 0; i < _visibleLines.length; i++) {
             dstring txt = _visibleLines[i];
@@ -3359,13 +3485,43 @@ class EditBox : EditWidgetBase {
                 if (highlight)
                     font.drawColoredText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, highlight, tabSize);
                 else
-                    font.drawText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, textColor, tabSize);
+                    if (_wordWrap)
+                    {
+                        //wrapLine(txt, 500);
+                        dstring[] wrappedLine = wrapLine(txt, 20);
+                        //dstring[] wrappedLine = _span[i].wrappedContent;
+                        //Log.d(wrappedLine);
+                        foreach(int q, curWrap; wrappedLine)
+                        {
+                            font.drawText(buf, rc.left - _scrollPos.x, rc.top + (q + i +wrapsUpTo(i)) * _lineHeight, curWrap, textColor, tabSize);
+                        }
+                    }
+                    else
+                    {
+                        font.drawText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, textColor, tabSize);
+                    }
             }
         }
 
         drawCaret(buf);
     }
 
+    int wrapsUpTo(int line)
+    {
+        if(line < _span.length)
+        {
+            
+            int sum;
+            for(int i = 0; i<line; i++)
+            {
+                sum += _span[i].len - 1;
+            }
+            //Log.d(sum);
+            return sum;
+        }
+        return 0;
+    }
+    
     protected override bool onLeftPaneMouseClick(MouseEvent event) {
         if (_leftPaneWidth <= 0)
             return false;
