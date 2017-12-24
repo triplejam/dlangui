@@ -452,7 +452,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     int measureWrappedText(dstring text)
     {
         FontRef font = font();
-        static int[dchar] miniGlyphCache;
+        int[dchar] miniGlyphCache;
         int accumulativeWidth = 0;
         int* charWidth;
         for (int i; i < text.length; i++)
