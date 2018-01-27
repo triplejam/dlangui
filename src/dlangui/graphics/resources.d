@@ -125,11 +125,13 @@ struct EmbeddedResourceList {
     void addResources(EmbeddedResource[] resources) {
         list ~= resources;
     }
+
     void dumpEmbeddedResources() {
         foreach(r; list) {
             Log.d("EmbeddedResource: ", r.name);
         }
     }
+
     /// find by exact file name
     EmbeddedResource * find(string name) {
         // search backwards to allow overriding standard resources (which are added first)
@@ -147,6 +149,7 @@ struct EmbeddedResourceList {
                 return &list[i];
         return null;
     }
+
     /// find by name w/o extension
     EmbeddedResource * findAutoExtension(string name) {
         string xmlname = name ~ ".xml";
@@ -211,21 +214,9 @@ EmbeddedResource[] embedResources(string[] resourceNames)() {
         return embedResources!(resourceNames[0 .. $/2])() ~ embedResources!(resourceNames[$/2 .. $])();
 }
 
-/// split string into lines, autodetect line endings
-string[] splitLines(string s) {
-    auto lines_crlf = split(s, "\r\n");
-    auto lines_cr = split(s, "\r");
-    auto lines_lf = split(s, "\n");
-    if (lines_crlf.length >= lines_cr.length && lines_crlf.length >= lines_lf.length)
-        return lines_crlf;
-    if (lines_cr.length > lines_lf.length)
-        return lines_cr;
-    return lines_lf;
-}
-
 /// embed all resources from list
 EmbeddedResource[] embedResourcesFromList(string resourceList)() {
-    static if (BACKEND_CONSOLE) {
+    static if (WIDGET_STYLE_CONSOLE) {
         return embedResources!(splitLines(import("console_" ~ resourceList)))();
     } else {
         return embedResources!(splitLines(import(resourceList)))();
@@ -322,35 +313,156 @@ class SolidFillDrawable : Drawable {
         _color = color;
     }
     override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
-        if ((_color >> 24) != 0xFF) // not fully transparent
+        if (!_color.isFullyTransparentColor)
             buf.fillRect(rc, _color);
     }
     @property override int width() { return 1; }
     @property override int height() { return 1; }
 }
 
-/// solid borders (may be of different width) and, optionally, solid inner area
-class FrameDrawable : Drawable {
-    protected uint _frameColor;  // frame color
-    protected Rect _frameWidths; // left, top, right, bottom border widths, in pixels
-    protected uint _middleColor; // middle area color (may be transparent)
-    this(uint frameColor, Rect borderWidths, uint innerAreaColor = 0xFFFFFFFF) {
-        _frameColor = frameColor;
-        _frameWidths = borderWidths;
-        _middleColor = innerAreaColor;
+class GradientDrawable : Drawable {
+    protected uint _color1; // top left
+    protected uint _color2; // bottom left
+    protected uint _color3; // top right
+    protected uint _color4; // bottom right
+
+    this(uint angle, uint color1, uint color2) {
+        // rotate a gradient; angle goes clockwise
+        import std.math;
+        float radians = angle * PI / 180;
+        float c = cos(radians);
+        float s = sin(radians);
+        if (s >= 0) {
+            if (c >= 0) {
+                // 0-90 degrees
+                _color1 = blendARGB(color1, color2, cast(uint)(255 * c));
+                _color2 = color2;
+                _color3 = color1;
+                _color4 = blendARGB(color1, color2, cast(uint)(255 * s));
+            } else {
+                // 90-180 degrees
+                _color1 = color2;
+                _color2 = blendARGB(color1, color2, cast(uint)(255 * -c));
+                _color3 = blendARGB(color1, color2, cast(uint)(255 * s));
+                _color4 = color1;
+            }
+        } else {
+            if (c < 0) {
+                // 180-270 degrees
+                _color1 = blendARGB(color1, color2, cast(uint)(255 * -s));
+                _color2 = color1;
+                _color3 = color2;
+                _color4 = blendARGB(color1, color2, cast(uint)(255 * -c));
+            } else {
+                // 270-360 degrees
+                _color1 = color1;
+                _color2 = blendARGB(color1, color2, cast(uint)(255 * -s));
+                _color3 = blendARGB(color1, color2, cast(uint)(255 * c));
+                _color4 = color2;
+            }
+        }
     }
-    this(uint frameColor, int borderWidth, uint innerAreaColor = 0xFFFFFFFF) {
-        _frameColor = frameColor;
-        _frameWidths = Rect(borderWidth, borderWidth, borderWidth, borderWidth);
-        _middleColor = innerAreaColor;
-    }
+
     override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
-        buf.drawFrame(rc, _frameColor, _frameWidths, _middleColor);
+        buf.fillGradientRect(rc, _color1, _color2, _color3, _color4);
     }
-    @property override int width() { return 1 + _frameWidths.left + _frameWidths.right; }
-    @property override int height() { return 1 + _frameWidths.top + _frameWidths.bottom; }
-    @property override Rect padding() { return _frameWidths; }
+
+    @property override int width() { return 1; }
+    @property override int height() { return 1; }
 }
+
+/// solid borders (may be of different width) and, optionally, solid inner area
+class BorderDrawable : Drawable {
+    protected uint _borderColor;
+    protected Rect _borderWidths; // left, top, right, bottom border widths, in pixels
+    protected uint _middleColor; // middle area color (may be transparent)
+
+    this(uint borderColor, Rect borderWidths, uint innerAreaColor = 0xFFFFFFFF) {
+        _borderColor = borderColor;
+        _borderWidths = borderWidths;
+        _middleColor = innerAreaColor;
+    }
+
+    this(uint borderColor, int borderWidth, uint innerAreaColor = 0xFFFFFFFF) {
+        _borderColor = borderColor;
+        _borderWidths = Rect(borderWidth, borderWidth, borderWidth, borderWidth);
+        _middleColor = innerAreaColor;
+    }
+
+    override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
+        buf.drawFrame(rc, _borderColor, _borderWidths, _middleColor);
+    }
+
+    @property override int width() { return 1 + _borderWidths.left + _borderWidths.right; }
+    @property override int height() { return 1 + _borderWidths.top + _borderWidths.bottom; }
+    @property override Rect padding() { return _borderWidths; }
+}
+deprecated alias FrameDrawable = BorderDrawable;
+
+/// box shadows, can be blurred
+class BoxShadowDrawable : Drawable {
+    protected int _offsetX;
+    protected int _offsetY;
+    protected int _blurSize;
+    protected uint _color;
+    protected Ref!ColorDrawBuf texture;
+
+    this(int offsetX, int offsetY, uint blurSize = 0, uint color = 0x0) {
+        _offsetX = offsetX;
+        _offsetY = offsetY;
+        _blurSize = blurSize;
+        _color = color;
+        // now create a texture which will contain the shadow
+        uint size = 4 * blurSize + 1;
+        texture = new ColorDrawBuf(size, size); // TODO: get from/put to cache
+        // clear
+        texture.fill(color | 0xFF000000);
+        // draw a square in center of the texture
+        texture.fillRect(Rect(blurSize, blurSize, size - blurSize, size - blurSize), color);
+        // blur the square
+        texture.blur(blurSize);
+    }
+
+    override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
+        // this is a size of blurred part
+        uint b = _blurSize + _blurSize / 2 + 1;
+        // move and expand the shadow
+        rc.left += _offsetX - b;
+        rc.top += _offsetY - b;
+        rc.right += _offsetX + b;
+        rc.bottom += _offsetY + b;
+
+        // apply new clipping to the DrawBuf to draw outside of the widget
+        auto saver = ClipRectSaver(buf, rc, 0, false);
+
+        if (_blurSize > 0) {
+            // Manual nine-patch
+            uint w = texture.width;
+            uint h = texture.height;
+
+            buf.drawFragment(rc.left, rc.top, texture, Rect(0, 0, b, b)); // top left
+            buf.drawRescaled(Rect(rc.left + b, rc.top, rc.right - b, rc.top + b), texture, Rect(b, 0, w - b, b)); // top center
+            buf.drawFragment(rc.right - b, rc.top, texture, Rect(w - b, 0, w, b)); // top right
+
+            buf.drawRescaled(Rect(rc.left, rc.top + b, rc.left + b, rc.bottom - b), texture, Rect(0, b, b, h - b)); // middle left
+            buf.drawRescaled(Rect(rc.left + b, rc.top + b, rc.right - b, rc.bottom - b), texture, Rect(b, b, w - b, h - b)); // middle center
+            buf.drawRescaled(Rect(rc.right - b, rc.top + b, rc.right, rc.bottom - b), texture, Rect(w - b, b, w, h - b)); // middle right
+
+            buf.drawFragment(rc.left, rc.bottom - b, texture, Rect(0, h - b, b, h)); // bottom left
+            buf.drawRescaled(Rect(rc.left + b, rc.bottom - b, rc.right - b, rc.bottom), texture, Rect(b, h - b, w - b, h)); // bottom center
+            buf.drawFragment(rc.right - b, rc.bottom - b, texture, Rect(w - b, h - b, w, h)); // bottom right
+
+            // debug
+            //~ buf.drawFragment(rc.left, rc.top, texture, Rect(0, 0, w, h));
+        } else {
+            buf.fillRect(rc, _color);
+        }
+    }
+
+    @property override int width() { return 1; }
+    @property override int height() { return 1; }
+}
+
 
 enum DimensionUnits {
     pixels,
@@ -399,7 +511,19 @@ static uint decodeDimension(string s) {
     return value;
 }
 
-static if (BACKEND_CONSOLE) {
+/// decode angle; only Ndeg format for now
+static uint decodeAngle(string s) {
+    int angle;
+    if (s.endsWith("deg"))
+        angle = to!int(s[0 .. $ - 3]);
+    else
+        Log.e("Invalid angle format: ", s);
+
+    // transform the angle to [0, 360)
+    return ((angle % 360) + 360) % 360;
+}
+
+static if (WIDGET_STYLE_CONSOLE) {
     /**
     Sample format:
     {
@@ -420,47 +544,73 @@ static if (BACKEND_CONSOLE) {
     }
 }
 
-/// decode solid color / gradient / frame drawable from string like #AARRGGBB, e.g. #5599AA
+/// decode solid color / gradient / border drawable from string like #AARRGGBB, e.g. #5599AA
 ///
 /// SolidFillDrawable: #AARRGGBB  - e.g. #8090A0 or #80ffffff
-/// FrameDrawable: #frameColor,frameWidth[,#middleColor]
-///             or #frameColor,leftBorderWidth,topBorderWidth,rightBorderWidth,bottomBorderWidth[,#middleColor]
-///                e.g. #000000,2,#C0FFFFFF - black frame of width 2 with 75% transparent white middle
-///                e.g. #0000FF,2,3,4,5,#FFFFFF - blue frame with left,top,right,bottom borders of width 2,3,4,5 and white inner area
+/// GradientDrawable: #linear,Ndeg,firstColor,secondColor
+/// BorderDrawable: #border,borderColor,borderWidth[,middleColor]
+///             or #border,borderColor,leftBorderWidth,topBorderWidth,rightBorderWidth,bottomBorderWidth[,middleColor]
+///                e.g. #border,#000000,2,#C0FFFFFF - black border of width 2 with 75% transparent white middle
+///                e.g. #border,#0000FF,2,3,4,5,#FFFFFF - blue border with left,top,right,bottom borders of width 2,3,4,5 and white inner area
 static Drawable createColorDrawable(string s) {
     Log.d("creating color drawable ", s);
-    uint[6] values;
-    int valueCount = 0;
-    int start = 0;
-    for (int i = 0; i <= s.length; i++) {
-        if (i == s.length || s[i] == ',') {
-            if (i > start) {
-                string item = s[start .. i];
-                if (item.startsWith("#"))
-                    values[valueCount++] = decodeHexColor(item);
-                else
-                    values[valueCount++] = decodeDimension(item);
-                if (valueCount >= 6)
-                    break;
-            }
-            start = i + 1;
+
+    enum DrawableType { SolidColor, LinearGradient, Border, BoxShadow }
+    auto type = DrawableType.SolidColor;
+
+    string[] items = s.split(',');
+    uint[] values;
+    int[] ivalues;
+    if (items.length != 0) {
+        if (items[0] == "#linear")
+            type = DrawableType.LinearGradient;
+        else if (items[0] == "#border")
+            type = DrawableType.Border;
+        else if (items[0] == "#box-shadow")
+            type = DrawableType.BoxShadow;
+        else if (items[0].startsWith("#"))
+            values ~= decodeHexColor(items[0]);
+
+        foreach (i, item; items[1 .. $]) {
+            if (item.startsWith("#"))
+                values ~= decodeHexColor(item);
+            else if (item.endsWith("deg"))
+                values ~= decodeAngle(item);
+            else if (type == DrawableType.BoxShadow) // offsets may be negative
+                ivalues ~= item.startsWith("-") ? -decodeDimension(item) : decodeDimension(item);
+            else
+                values ~= decodeDimension(item);
+            if (i >= 6)
+                break;
         }
     }
-    if (valueCount == 1) // only color #AARRGGBB
+
+    if (type == DrawableType.SolidColor && values.length == 1) // only color #AARRGGBB
         return new SolidFillDrawable(values[0]);
-    else if (valueCount == 2) // frame color and frame width, with transparent inner area - #AARRGGBB,NN
-        return new FrameDrawable(values[0], values[1]);
-    else if (valueCount == 3) // frame color, frame width, inner area color - #AARRGGBB,NN,#AARRGGBB
-        return new FrameDrawable(values[0], values[1], values[2]);
-    else if (valueCount == 5) // frame color, frame widths for left,top,right,bottom and transparent inner area - #AARRGGBB,NNleft,NNtop,NNright,NNbottom
-        return new FrameDrawable(values[0], Rect(values[1], values[2], values[3], values[4]));
-    else if (valueCount == 6) // frame color, frame widths for left,top,right,bottom, inner area color - #AARRGGBB,NNleft,NNtop,NNright,NNbottom,#AARRGGBB
-        return new FrameDrawable(values[0], Rect(values[1], values[2], values[3], values[4]), values[5]);
+    else if (type == DrawableType.LinearGradient && values.length == 3) // angle and two gradient colors
+        return new GradientDrawable(values[0], values[1], values[2]);
+    else if (type == DrawableType.Border) {
+        if (values.length == 2) // border color and border width, with transparent inner area - #AARRGGBB,NN
+            return new BorderDrawable(values[0], values[1]);
+        else if (values.length == 3) // border color, border width, inner area color - #AARRGGBB,NN,#AARRGGBB
+            return new BorderDrawable(values[0], values[1], values[2]);
+        else if (values.length == 5) // border color, border widths for left,top,right,bottom and transparent inner area - #AARRGGBB,NNleft,NNtop,NNright,NNbottom
+            return new BorderDrawable(values[0], Rect(values[1], values[2], values[3], values[4]));
+        else if (values.length == 6) // border color, border widths for left,top,right,bottom, inner area color - #AARRGGBB,NNleft,NNtop,NNright,NNbottom,#AARRGGBB
+            return new BorderDrawable(values[0], Rect(values[1], values[2], values[3], values[4]), values[5]);
+    } else if (type == DrawableType.BoxShadow) {
+        if (ivalues.length == 2 && values.length == 0) // shadow X and Y offsets
+            return new BoxShadowDrawable(ivalues[0], ivalues[1]);
+        else if (ivalues.length == 3 && values.length == 0) // shadow offsets and blur size
+            return new BoxShadowDrawable(ivalues[0], ivalues[1], ivalues[2]);
+        else if (ivalues.length == 3 && values.length == 1) // shadow offsets, blur size and color
+            return new BoxShadowDrawable(ivalues[0], ivalues[1], ivalues[2], values[0]);
+    }
     Log.e("Invalid drawable string format: ", s);
     return new EmptyDrawable(); // invalid format - just return empty drawable
 }
 
-static if (BACKEND_CONSOLE) {
+static if (WIDGET_STYLE_CONSOLE) {
     /**
         Text image drawable.
         Resource file extension: .tim
@@ -480,8 +630,13 @@ static if (BACKEND_CONSOLE) {
     {'╔═╗' '║ ║' '╚═╝' bc 0x000080 tc 0xFF0000 ninepatch 1 1 1 1}
 
     */
+
+    abstract class ConsoleDrawBuf : DrawBuf
+    {
+        abstract void drawChar(int x, int y, dchar ch, uint color, uint bgcolor);
+    }
+
     class TextDrawable : Drawable {
-        import dlangui.platforms.console.consoleapp : ConsoleDrawBuf;
         private int _width;
         private int _height;
         private dchar[] _text;
@@ -691,6 +846,7 @@ class ImageDrawable : Drawable {
         debug _instanceCount--;
         debug(resalloc) Log.d("Destroyed ImageDrawable, count=", _instanceCount);
     }
+
     @property override int width() {
         if (_image.isNull)
             return 0;
@@ -698,6 +854,7 @@ class ImageDrawable : Drawable {
             return _image.width - 2;
         return _image.width;
     }
+
     @property override int height() {
         if (_image.isNull)
             return 0;
@@ -705,11 +862,13 @@ class ImageDrawable : Drawable {
             return _image.height - 2;
         return _image.height;
     }
+
     @property override Rect padding() {
         if (!_image.isNull && _image.hasNinePatch)
             return _image.ninePatch.padding;
         return Rect(0,0,0,0);
     }
+
     private static void correctFrameBounds(ref int n1, ref int n2, ref int n3, ref int n4) {
         if (n1 > n2) {
             //assert(n2 - n1 == n4 - n3);
@@ -718,6 +877,7 @@ class ImageDrawable : Drawable {
             n3 = n4 = n3 + middledist;
         }
     }
+
     override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
         if (_image.isNull)
             return;
@@ -1053,6 +1213,44 @@ class StateDrawable : Drawable {
     }
 }
 
+/// Drawable which allows to combine together background image, gradient, borders, box shadows, etc.
+class CombinedDrawable : Drawable {
+
+    DrawableRef boxShadow;
+    DrawableRef background;
+    DrawableRef border;
+
+    this(uint backgroundColor, string backgroundImageId, string borderDescription, string boxShadowDescription) {
+        boxShadow = boxShadowDescription !is null ? drawableCache.get("#box-shadow," ~ boxShadowDescription) : new EmptyDrawable;
+        background = 
+            (backgroundImageId !is null) ? drawableCache.get(backgroundImageId) : 
+            (!backgroundColor.isFullyTransparentColor) ? new SolidFillDrawable(backgroundColor) : null;
+        if (background is null)
+            background = new EmptyDrawable;
+        border = borderDescription !is null ? drawableCache.get("#border," ~ borderDescription) : new EmptyDrawable;
+    }
+
+    override void drawTo(DrawBuf buf, Rect rc, uint state = 0, int tilex0 = 0, int tiley0 = 0) {
+        boxShadow.drawTo(buf, rc, state, tilex0, tiley0);
+        // make background image smaller to fit borders
+        Rect backrc = rc;
+        backrc.left += border.padding.left;
+        backrc.top += border.padding.top;
+        backrc.right -= border.padding.right;
+        backrc.bottom -= border.padding.bottom;
+        background.drawTo(buf, backrc, state, tilex0, tiley0);
+        border.drawTo(buf, rc, state, tilex0, tiley0);
+    }
+
+    @property override int width() { return background.width + border.padding.left + border.padding.right; }
+    @property override int height() { return background.height + border.padding.top + border.padding.bottom; }
+    @property override Rect padding() {
+        return Rect(background.padding.left + border.padding.left, background.padding.top + border.padding.top, 
+            background.padding.right + border.padding.right, background.padding.bottom + border.padding.bottom);
+    }
+}
+
+
 alias DrawableRef = Ref!Drawable;
 
 
@@ -1069,9 +1267,11 @@ class ImageCache {
 
         bool _error; // flag to avoid loading of file if it has been failed once
         bool _used;
+
         this(string filename) {
             _filename = filename;
         }
+
         /// get normal image
         @property ref DrawBufRef get() {
             if (!_drawbuf.isNull || _error) {
@@ -1104,6 +1304,7 @@ class ImageCache {
             }
             return _transformMap[transform];
         }
+
         /// remove from memory, will cause reload on next access
         void compact() {
             if (!_drawbuf.isNull)
@@ -1192,13 +1393,12 @@ class DrawableCache {
         string _id;
         string _filename;
         bool _tiled;
-        bool _error;
-        bool _used;
         DrawableRef _drawable;
         DrawableRef[ColorTransform] _transformed;
 
-        debug private static __gshared int _instanceCount;
-        debug @property static int instanceCount() { return _instanceCount; }
+        bool _error; // flag to avoid loading of file if it has been failed once
+        bool _used;
+
         this(string id, string filename, bool tiled) {
             _id = id;
             _filename = filename;
@@ -1207,6 +1407,9 @@ class DrawableCache {
             debug ++_instanceCount;
             debug(resalloc) Log.d("Created DrawableCacheItem, count=", _instanceCount);
         }
+        debug private static __gshared int _instanceCount;
+        debug @property static int instanceCount() { return _instanceCount; }
+
         ~this() {
             _drawable.clear();
             foreach(ref t; _transformed)
@@ -1234,126 +1437,26 @@ class DrawableCache {
         }
 
         /// returns drawable (loads from file if necessary)
-        @property ref DrawableRef drawable() {
+        @property ref DrawableRef drawable(in ColorTransform transform = ColorTransform()) {
             _used = true;
-            if (!_drawable.isNull || _error)
-                return _drawable;
-            if (_filename !is null) {
-                // reload from file
-                if (_filename.endsWith(".xml")) {
-                    // XML drawables support
-                        StateDrawable d = new StateDrawable();
-                        if (!d.load(_filename)) {
-                            destroy(d);
-                            _error = true;
-                        } else {
-                            _drawable = d;
-                        }
-                } else if (_filename.endsWith(".tim")) {
-                    static if (BACKEND_CONSOLE) {
-                        try {
-                            // .tim (text image) drawables support
-                            string s = cast(string)loadResourceBytes(_filename);
-                            if (s.length) {
-                                TextDrawable d = new TextDrawable(s);
-                                if (d.width && d.height) {
-                                    _drawable = d;
-                                }
-                            }
-                        } catch (Exception e) {
-                            // cannot find drawable file
-                        }
-                    }
-                    if (!_drawable)
-                        _error = true;
-                } else if (_filename.startsWith("#")) {
-                    // color reference #AARRGGBB, e.g. #5599AA, or FrameDrawable description string #frameColor,frameSize,#innerColor
-                    _drawable = createColorDrawable(_filename);
-                } else if (_filename.startsWith("{")) {
-                    // json in {} with text drawable description
-                    static if (BACKEND_CONSOLE) {
-                        _drawable = createTextDrawable(_filename);
-                    }
-                } else {
-                    static if (BACKEND_GUI) {
-                        // PNG/JPEG drawables support
-                        DrawBufRef image = imageCache.get(_filename);
-                        if (!image.isNull) {
-                            bool ninePatch = _filename.endsWith(".9.png");
-                            _drawable = new ImageDrawable(image, _tiled, ninePatch);
-                        } else
-                            _error = true;
-                    } else {
-                        _error = true;
-                    }
-                }
-            }
-            return _drawable;
-        }
-        /// returns drawable (loads from file if necessary)
-        @property ref DrawableRef drawable(ref ColorTransform transform) {
-            if (transform.empty)
-                return drawable();
-            if (transform in _transformed)
+            if (!transform.empty && transform in _transformed)
                 return _transformed[transform];
-            _used = true;
             if (!_drawable.isNull || _error)
                 return _drawable;
-            if (_filename !is null) {
-                // reload from file
-                if (_filename.endsWith(".xml") || _filename.endsWith(".XML")) {
-                    // XML drawables support
-                    StateDrawable d = new StateDrawable();
-                    if (!d.load(_filename)) {
-                        Log.e("failed to load .xml drawable from ", _filename);
-                        destroy(d);
-                        _error = true;
-                    } else {
-                        Log.d("loaded .xml drawable from ", _filename);
-                        _drawable = d;
-                    }
-                } else if (_filename.endsWith(".tim") || _filename.endsWith(".TIM")) {
-                    static if (BACKEND_CONSOLE) {
-                        try {
-                            // .tim (text image) drawables support
-                            string s = cast(string)loadResourceBytes(_filename);
-                            if (s.length) {
-                                TextDrawable d = new TextDrawable(s);
-                                if (d.width && d.height) {
-                                    _drawable = d;
-                                }
-                            }
-                        } catch (Exception e) {
-                            // cannot find drawable file
-                        }
-                    }
-                    if (!_drawable)
-                        _error = true;
-                } else if (_filename.startsWith("{")) {
-                    // json in {} with text drawable description
-                    static if (BACKEND_CONSOLE) {
-                        _drawable = createTextDrawable(_filename);
-                    }
-                } else {
-                    static if (BACKEND_GUI) {
-                        // PNG/JPEG drawables support
-                        DrawBufRef image = imageCache.get(_filename, transform);
-                        if (!image.isNull) {
-                            bool ninePatch = _filename.endsWith(".9.png") ||  _filename.endsWith(".9.PNG");
-                            _transformed[transform] = new ImageDrawable(image, _tiled, ninePatch);
-                            return _transformed[transform];
-                        } else {
-                            Log.e("failed to load image from ", _filename);
-                            _error = true;
-                        }
-                    } else {
-                        _error = true;
-                    }
-                }
+
+            // not in cache - create it
+            Drawable dr = makeDrawableFromId(_filename, _tiled, transform);
+            _error = dr is null;
+            if (transform.empty) {
+                _drawable = dr;
+                return _drawable;
+            } else {
+                _transformed[transform] = dr;
+                return _transformed[transform];
             }
-            return _drawable;
         }
     }
+
     void clear() {
         Log.d("DrawableCache.clear()");
         _idToFileMap.destroy();
@@ -1371,35 +1474,19 @@ class DrawableCache {
         foreach (item; _idToDrawableMap)
             item.cleanup();
     }
+
     string[] _resourcePaths;
     string[string] _idToFileMap;
     DrawableCacheItem[string] _idToDrawableMap;
     DrawableRef _nullDrawable;
-    ref DrawableRef get(string id) {
-        while (id.length && (id[0] == ' ' || id[0] == '\t' || id[0] == '\r' || id[0] == '\n'))
-               id = id[1 .. $];
-        if (id.equal("@null"))
-            return _nullDrawable;
-        if (id in _idToDrawableMap)
-            return _idToDrawableMap[id].drawable;
-        string resourceId = id;
-        bool tiled = false;
-        if (id.endsWith(".tiled")) {
-            resourceId = id[0..$-6]; // remove .tiled
-            tiled = true;
-        }
-        string filename = findResource(resourceId);
-        DrawableCacheItem item = new DrawableCacheItem(id, filename, tiled);
-        _idToDrawableMap[id] = item;
-        return item.drawable;
-    }
-    ref DrawableRef get(string id, ref ColorTransform transform) {
-        if (transform.empty)
-            return get(id);
+
+    ref DrawableRef get(string id, in ColorTransform transform = ColorTransform()) {
+        id = id.strip;
         if (id.equal("@null"))
             return _nullDrawable;
         if (id in _idToDrawableMap)
             return _idToDrawableMap[id].drawable(transform);
+        // not found - create it
         string resourceId = id;
         bool tiled = false;
         if (id.endsWith(".tiled")) {
@@ -1407,10 +1494,11 @@ class DrawableCache {
             tiled = true;
         }
         string filename = findResource(resourceId);
-        DrawableCacheItem item = new DrawableCacheItem(id, filename, tiled);
+        auto item = new DrawableCacheItem(id, filename, tiled);
         _idToDrawableMap[id] = item;
         return item.drawable(transform);
     }
+
     @property string[] resourcePaths() {
         return _resourcePaths;
     }
@@ -1432,6 +1520,7 @@ class DrawableCache {
         _resourcePaths = existingPaths;
         clear();
     }
+
     /// concatenates path with resource id and extension, returns pathname if there is such file, null if file does not exist
     private string checkFileName(string path, string id, string extension) {
         char[] fn = path.dup;
@@ -1441,10 +1530,11 @@ class DrawableCache {
             return fn.dup;
         return null;
     }
+
     /// get resource file full pathname by resource id, null if not found
     string findResource(string id) {
         if (id.startsWith("#") || id.startsWith("{"))
-            return id; // it's not a file name, just a color #AARRGGBB
+            return id; // it's not a file name
         if (id in _idToFileMap)
             return _idToFileMap[id];
         EmbeddedResource * embedded = embeddedResourceList.findAutoExtension(id);
@@ -1456,7 +1546,7 @@ class DrawableCache {
         foreach(string path; _resourcePaths) {
             string fn;
             fn = checkFileName(path, id, ".xml");
-            if (fn is null && BACKEND_CONSOLE)
+            if (fn is null && WIDGET_STYLE_CONSOLE)
                 fn = checkFileName(path, id, ".tim");
             if (fn is null)
                 fn = checkFileName(path, id, ".png");
@@ -1500,12 +1590,63 @@ class DrawableCache {
 }
 
 
-// load text resource
+/// This function takes an id and creates a drawable
+/// id may be a name of file, #directive, color or json
+private Drawable makeDrawableFromId(in string id, in bool tiled, ColorTransform transform = ColorTransform()) {
+    if (id !is null) {
+        if (id.endsWith(".xml") || id.endsWith(".XML")) {
+            // XML drawables support
+            auto d = new StateDrawable;
+            if (!d.load(id)) {
+                Log.e("failed to load .xml drawable from ", id);
+                destroy(d);
+                return null;
+            } else {
+                Log.d("loaded .xml drawable from ", id);
+                return d;
+            }
+        } else if (id.endsWith(".tim") || id.endsWith(".TIM")) {
+            static if (WIDGET_STYLE_CONSOLE) {
+                try {
+                    // .tim (text image) drawables support
+                    string s = cast(string)loadResourceBytes(id);
+                    if (s.length) {
+                        auto d = new TextDrawable(s);
+                        if (d.width && d.height) {
+                            return d;
+                        }
+                    }
+                } catch (Exception e) {
+                    // cannot find drawable file
+                }
+            }
+        } else if (id.startsWith("#")) {
+            // color reference #AARRGGBB, e.g. #5599AA, a gradient, border description, etc.
+            return createColorDrawable(id);
+        } else if (id.startsWith("{")) {
+            // json in {} with text drawable description
+            static if (WIDGET_STYLE_CONSOLE) {
+               return createTextDrawable(id);
+            }
+        } else {
+            static if (BACKEND_GUI) {
+                // PNG/JPEG drawables support
+                DrawBufRef image = transform.empty ? imageCache.get(id) : imageCache.get(id, transform);
+                if (!image.isNull) {
+                    bool ninePatch = id.endsWith(".9.png") ||  id.endsWith(".9.PNG");
+                    return new ImageDrawable(image, tiled, ninePatch);
+                } else
+                    Log.e("Failed to load image from ", id);
+            }
+        }
+    }
+    return null;
+}
+
+
+/// load text resource
 string loadTextResource(string resourceId) {
-    import dlangui.graphics.resources;
-    import std.string : endsWith;
-    string filename;
-    filename = drawableCache.findResource(resourceId);
+    string filename = drawableCache.findResource(resourceId);
     if (!filename) {
         Log.e("Object resource file not found for resourceId ", resourceId);
         assert(false);

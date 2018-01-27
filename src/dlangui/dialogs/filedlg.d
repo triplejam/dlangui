@@ -503,7 +503,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
                 sz.y = fnt.height;
             return sz;
         }
-        if (BACKEND_CONSOLE)
+        if (WIDGET_STYLE_CONSOLE)
             return Point(0, 0);
         else {
             DrawableRef icon = rowIcon(row);
@@ -526,7 +526,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             Align ha = Align.Left;
             //if (sz.y < rc.height)
             //    applyAlign(rc, sz, ha, Align.VCenter);
-            int offset = BACKEND_CONSOLE ? 0 : 1;
+            int offset = WIDGET_STYLE_CONSOLE ? 0 : 1;
             uint cl = _fileList.textColor;
             if (_entries[row].isDir)
                 cl = style.customColor("file_dialog_dir_name_color", cl);
@@ -550,7 +550,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         WidgetListAdapter adapter = new WidgetListAdapter();
         foreach(ref RootEntry root; _roots) {
             ImageTextButton btn = new ImageTextButton(null, root.icon, root.label);
-            static if (BACKEND_CONSOLE) btn.margins = Rect(1, 1, 0, 0);
+            static if (WIDGET_STYLE_CONSOLE) btn.margins = Rect(1, 1, 0, 0);
             btn.orientation = Orientation.Vertical;
             btn.styleId = STYLE_TRANSPARENT_BUTTON_BACKGROUND;
             btn.focusable = false;
@@ -565,7 +565,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             return true;
         };
         res.focusable = true;
-        debug Log.d("root lisk styleId=", res.styleId);
+        debug Log.d("root list styleId=", res.styleId);
         return res;
     }
 
@@ -715,7 +715,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
     override void initialize() {
         _roots = getRootPaths() ~ getBookmarkPaths();
 
-        layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT).minWidth(BACKEND_CONSOLE ? 50 : 600);
+        layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT).minWidth(WIDGET_STYLE_CONSOLE ? 50 : 600);
         //minHeight = 400;
 
         LinearLayout content = new HorizontalLayout("dlgcontent");
@@ -725,10 +725,10 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
         //leftPanel = new VerticalLayout("places");
         //leftPanel.addChild(createRootsList());
-        //leftPanel.layoutHeight(FILL_PARENT).minWidth(BACKEND_CONSOLE ? 7 : 40);
+        //leftPanel.layoutHeight(FILL_PARENT).minWidth(WIDGET_STYLE_CONSOLE ? 7 : 40);
 
         leftPanel = createRootsList();
-        leftPanel.minWidth(BACKEND_CONSOLE ? 7 : 40.pointsToPixels);
+        leftPanel.minWidth(WIDGET_STYLE_CONSOLE ? 7 : 40.pointsToPixels);
 
         rightPanel = new VerticalLayout("main");
         rightPanel.layoutHeight(FILL_PARENT).layoutWidth(FILL_PARENT);
@@ -745,6 +745,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         fnlayout.layoutWidth(FILL_PARENT);
         _edFilename = new EditLine("filename");
         _edFilename.layoutWidth(FILL_PARENT);
+        _edFilename.setDefaultPopupMenu();
         if (_flags & FileDialogFlag.SelectDirectory) {
             _edFilename.visibility = Visibility.Gone;
         }
@@ -770,6 +771,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         }
 
         _fileList = new StringGridWidget("files");
+        _fileList.styleId = STYLE_FILE_DIALOG_GRID;
         _fileList.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
         _fileList.fullColumnOnLeft(false);
         _fileList.fullRowOnTop(false);
@@ -1085,6 +1087,11 @@ class FilePathPanel : FrameLayout {
         addChild(_segments);
         addChild(_edPath);
     }
+
+    void setDefaultPopupMenu() {
+        _edPath.setDefaultPopupMenu();
+    }
+
     protected bool onEditorFocusChanged(Widget source, bool focused) {
         if (!focused) {
             _edPath.text = toUTF32(_path);
@@ -1147,11 +1154,15 @@ class FileNameEditLine : HorizontalLayout {
         return _edFileName.enterKey;
     }
 
+    void setDefaultPopupMenu() {
+        _edFileName.setDefaultPopupMenu();
+    }
+
     this(string ID = null) {
         super(ID);
         _caption = UIString.fromId("TITLE_OPEN_FILE"c).value;
         _edFileName = new EditLine("FileNameEditLine_edFileName");
-        _edFileName.minWidth(BACKEND_CONSOLE ? 16 : 200);
+        _edFileName.minWidth(WIDGET_STYLE_CONSOLE ? 16 : 200);
         _edFileName.layoutWidth = FILL_PARENT;
         _btn = new Button("FileNameEditLine_btnFile", "..."d);
         _btn.styleId = STYLE_BUTTON_NOMARGINS;
@@ -1199,7 +1210,7 @@ class FileNameEditLine : HorizontalLayout {
     @property void caption(dstring s) { _caption = s; }
 
     /// returns widget content text (override to support this)
-    override @property dstring text() { return _edFileName.text; }
+    override @property dstring text() const { return _edFileName.text; }
     /// sets widget content text (override to support this)
     override @property Widget text(dstring s) { _edFileName.text = s; return this; }
     /// sets widget content text (override to support this)

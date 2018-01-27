@@ -266,7 +266,9 @@ extern (C) int UIAppMain(string[] args) {
     //}
 
     // create window
-    Window window = Platform.instance.createWindow("DlangUI Example 1", null, WindowFlag.Resizable, 800, 700);
+    //Window window = Platform.instance.createWindow("DlangUI Example 1", null, WindowFlag.Resizable, 800, 700);
+    // Expand window size if content is bigger than 800, 700 (change to above version if you want scrollbars and 800, 700 size)
+    Window window = Platform.instance.createWindow("DlangUI Example 1", null, WindowFlag.Resizable | WindowFlag.ExpandSize, 800, 700);
     // here you can see window or content resize mode
     //Window window = Platform.instance.createWindow("DlangUI Example 1", null, WindowFlag.Resizable, 400, 400);
     //window.windowOrContentResizeMode = WindowOrContentResizeMode.resizeWindow;
@@ -1234,6 +1236,25 @@ void main()
             static if (ENABLE_OPENGL) {
                 //
                 tabs.addTab(new MyOpenglWidget(), "OpenGL"d);
+            }
+
+            {
+                import dlangui.graphics.iconprovider;
+                TableLayout icons = new TableLayout("icons");
+                icons.colCount = 6;
+                for(StandardIcon icon = StandardIcon.init; icon <= StandardIcon.deviceCameraVideo; ++icon)
+                {
+                    icons.addChild(new TextWidget(to!string(icon), to!dstring(icon)).fontSize(12.pointsToPixels).alignment(Align.Right | Align.VCenter));
+                    auto imageBufRef = platform.iconProvider().getStandardIcon(icon);
+                    auto imageWidget = new ImageWidget();
+                    if (!imageBufRef.isNull()) {
+                        auto imageDrawable = new ImageDrawable(imageBufRef);
+                        imageWidget.drawable = imageDrawable;
+                    }
+                    icons.addChild(imageWidget).alignment(Align.Left | Align.VCenter);
+                }
+                icons.margins(Rect(10,10,10,10)).layoutWidth(FILL_PARENT);
+                tabs.addTab(icons, "Icons"d);
             }
         }
 

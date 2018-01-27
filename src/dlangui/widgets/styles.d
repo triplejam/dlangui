@@ -111,10 +111,14 @@ immutable string STYLE_LIST_ITEM = "LIST_ITEM";
 immutable string STYLE_EDIT_LINE = "EDIT_LINE";
 /// standard style id for EditBox
 immutable string STYLE_EDIT_BOX = "EDIT_BOX";
+/// standard style id for LogWidget
+immutable string STYLE_LOG_WIDGET = "LOG_WIDGET";
 /// standard style id for lists
 immutable string STYLE_LIST_BOX = "LIST_BOX";
 /// standard style id for StringGrid
 immutable string STYLE_STRING_GRID = "STRING_GRID";
+/// standard style id for FileDialog StringGrid
+immutable string STYLE_FILE_DIALOG_GRID = "FILE_DIALOG_GRID";
 /// standard style id for background similar to transparent button
 immutable string STYLE_TRANSPARENT_BUTTON_BACKGROUND = "TRANSPARENT_BUTTON_BACKGROUND";
 /// standard style id for GroupBox
@@ -324,6 +328,8 @@ protected:
     uint _alpha;
     string _fontFace;
     string _backgroundImageId;
+    string _boxShadow;
+    string _border;
     Rect _padding;
     Rect _margins;
     int _minWidth = SIZE_UNSPECIFIED;
@@ -411,10 +417,14 @@ public:
         if (!(cast(Style)this)._backgroundDrawable.isNull)
             return (cast(Style)this)._backgroundDrawable;
         string image = backgroundImageId;
-        if (image !is null) {
+        uint color = backgroundColor;
+        string borders = border;
+        string shadows = boxShadow;
+        if (borders !is null || shadows !is null) {
+            (cast(Style)this)._backgroundDrawable = new CombinedDrawable(color, image, borders, shadows);
+        } else if (image !is null) {
             (cast(Style)this)._backgroundDrawable = drawableCache.get(image);
         } else {
-            uint color = backgroundColor;
             (cast(Style)this)._backgroundDrawable = isFullyTransparentColor(color) ? new EmptyDrawable() : new SolidFillDrawable(color);
         }
         return (cast(Style)this)._backgroundDrawable;
@@ -527,6 +537,24 @@ public:
             return parentStyle.fontSize;
     }
 
+    /// box shadow
+    @property string boxShadow() const {
+        if (_boxShadow !is null)
+            return _boxShadow;
+        else {
+            return parentStyle.boxShadow;
+        }
+    }
+
+    /// border
+    @property string border() const {
+        if (_border !is null)
+            return _border;
+        else {
+            return parentStyle.border;
+        }
+    }
+
     //===================================================
     // layout parameters: margins / padding
 
@@ -587,7 +615,7 @@ public:
             return parentStyle.backgroundColor;
     }
 
-    /// font size
+    /// background image id
     @property string backgroundImageId() const {
         if (_backgroundImageId == COLOR_DRAWABLE)
             return null;
@@ -779,6 +807,18 @@ public:
         return this;
     }
 
+    @property Style boxShadow(string s) {
+        _boxShadow = s;
+        _backgroundDrawable.clear();
+        return this;
+    }
+
+    @property Style border(string s) {
+        _border = s;
+        _backgroundDrawable.clear();
+        return this;
+    }
+
     @property Style margins(Rect rc) {
         _margins = rc;
         return this;
@@ -890,6 +930,8 @@ public:
         res._alpha = _alpha;
         res._fontFace = _fontFace;
         res._backgroundImageId = _backgroundImageId;
+        res._boxShadow = _boxShadow;
+        res._border = _border;
         res._padding = _padding;
         res._margins = _margins;
         res._minWidth = _minWidth;
@@ -1019,6 +1061,14 @@ class Theme : Style {
     @property override string backgroundImageId() const {
         return _backgroundImageId;
     }
+    /// box shadow
+    @property override string boxShadow() const {
+        return _boxShadow;
+    }
+    /// border
+    @property override string border() const {
+        return _border;
+    }
     /// minimal width constraint, 0 if limit is not set
     @property override uint minWidth() const {
         return _minWidth;
@@ -1141,7 +1191,7 @@ Theme createDefaultTheme() {
         res.fontFace = "Verdana";
     }
     //res.fontFace = "Arial Narrow";
-    static if (BACKEND_CONSOLE) {
+    static if (WIDGET_STYLE_CONSOLE) {
         res.fontSize = 1;
         res.textColor = 0xFFFFFF;
         Style button = res.createSubstyle(STYLE_BUTTON).backgroundColor(0x808080).alignment(Align.Center).setMargins(0, 0, 0, 0).textColor(0x000000);
@@ -1478,24 +1528,54 @@ int decodeLayoutDimension(string s) {
     return decodeDimension(s);
 }
 
+/// remove superfluous space characters from a border property
+string sanitizeBorderProperty(string s) pure {
+    string[] parts = s.split(',');
+    foreach (ref part; parts)
+        part = part.strip();
+    string joined = parts.join(',');
+
+    char[] res;
+    // replace repeating space characters with one space
+    import std.ascii : isWhite;
+    bool isSpace;
+    foreach (c; joined) {
+        if (isWhite(c)) {
+            if (!isSpace) {
+                res ~= ' ';
+                isSpace = true;
+            }
+        } else {
+            res ~= c;
+            isSpace = false;
+        }
+    }
+
+    return cast(string)res;
+}
+
+/// remove superfluous space characters from a box shadow property
+string sanitizeBoxShadowProperty(string s) pure {
+    return sanitizeBorderProperty(s);
+}
+
 /// load style attributes from XML element
 bool loadStyleAttributes(Style style, Element elem, bool allowStates) {
     //Log.d("Theme: loadStyleAttributes ", style.id, " ", elem.tag.attr);
     if ("backgroundImageId" in elem.tag.attr)
         style.backgroundImageId = elem.tag.attr["backgroundImageId"];
-    if ("backgroundColor" in elem.tag.attr) {
-        uint col = decodeHexColor(elem.tag.attr["backgroundColor"]);
-        style.backgroundColor = col;
-        //Log.d("    background color=", col);
-    } else {
-        //Log.d("    no background color attr");
-    }
+    if ("backgroundColor" in elem.tag.attr)
+        style.backgroundColor = decodeHexColor(elem.tag.attr["backgroundColor"]);
     if ("textColor" in elem.tag.attr)
         style.textColor = decodeHexColor(elem.tag.attr["textColor"]);
     if ("margins" in elem.tag.attr)
         style.margins = decodeRect(elem.tag.attr["margins"]);
     if ("padding" in elem.tag.attr)
         style.padding = decodeRect(elem.tag.attr["padding"]);
+    if ("border" in elem.tag.attr)
+        style.border = sanitizeBorderProperty(elem.tag.attr["border"]);
+    if ("boxShadow" in elem.tag.attr)
+        style.boxShadow = sanitizeBoxShadowProperty(elem.tag.attr["boxShadow"]);
     if ("align" in elem.tag.attr)
         style.alignment = decodeAlignment(elem.tag.attr["align"]);
     if ("minWidth" in elem.tag.attr)
@@ -1549,7 +1629,7 @@ bool loadStyleAttributes(Style style, Element elem, bool allowStates) {
             if (colorid)
                 style.setCustomColor(colorid, color);
         } else if (item.tag.name.equal("length")) {
-            // <color id="buttons_panel_color" value="#303080"/>
+            // <length id="overlap" value="2"/>
             string lenid = attrValue(item, "id");
             string lenvalue = attrValue(item, "value");
             uint len = decodeDimension(lenvalue);
@@ -1614,7 +1694,7 @@ bool loadTheme(Theme theme, string resourceId, int level = 0) {
 
     string filename;
     try {
-        filename = drawableCache.findResource(BACKEND_CONSOLE ? "console_" ~ resourceId : resourceId);
+        filename = drawableCache.findResource(WIDGET_STYLE_CONSOLE ? "console_" ~ resourceId : resourceId);
         if (!filename || !filename.endsWith(".xml"))
             return false;
         string s = cast(string)loadResourceBytes(filename);
@@ -1693,4 +1773,13 @@ string overrideCustomDrawableId(string id) {
 
 shared static ~this() {
     currentTheme = null;
+}
+
+
+
+
+unittest {
+    assert(sanitizeBorderProperty("   #aaa, 2  ") == "#aaa,2");
+    assert(sanitizeBorderProperty("   #aaa, 2, 2, 2, 4") == "#aaa,2,2,2,4");
+    assert(sanitizeBorderProperty("   #a aa  ,  2   4  ") == "#a aa,2 4");
 }

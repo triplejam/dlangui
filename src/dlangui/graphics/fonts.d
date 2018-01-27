@@ -74,11 +74,11 @@ enum FontWeight : int {
     Bold = 800
 }
 
-immutable dchar UNICODE_SOFT_HYPHEN_CODE = 0x00ad;
-immutable dchar UNICODE_ZERO_WIDTH_SPACE = 0x200b;
-immutable dchar UNICODE_NO_BREAK_SPACE = 0x00a0;
-immutable dchar UNICODE_HYPHEN = 0x2010;
-immutable dchar UNICODE_NB_HYPHEN = 0x2011;
+enum dchar UNICODE_SOFT_HYPHEN_CODE = 0x00ad;
+enum dchar UNICODE_ZERO_WIDTH_SPACE = 0x200b;
+enum dchar UNICODE_NO_BREAK_SPACE = 0x00a0;
+enum dchar UNICODE_HYPHEN = 0x2010;
+enum dchar UNICODE_NB_HYPHEN = 0x2011;
 
 /// custom character properties - for char-by-char drawing of text string with different character color and style
 struct CustomCharProps {
@@ -124,7 +124,7 @@ static if (ENABLE_OPENGL) {
 }
 
 /// constant for measureText maxWidth paramenter - to tell that all characters of text string should be measured.
-immutable int MAX_WIDTH_UNSPECIFIED = int.max;
+enum int MAX_WIDTH_UNSPECIFIED = int.max;
 
 /** Instance of font with specific size, weight, face, etc.
  *
@@ -133,6 +133,14 @@ immutable int MAX_WIDTH_UNSPECIFIED = int.max;
  * Use FontManager.instance.getFont() to retrieve font instance.
  */
 class Font : RefCountedObject {
+
+    this() {
+        _textSizeBuffer.reserve(100);
+        _textSizeBuffer.assumeSafeAppend();
+    }
+    ~this() { clear(); }
+
+
     /// returns font size (as requested from font engine)
     abstract @property int size();
     /// returns actual font height including interline space
@@ -186,7 +194,22 @@ class Font : RefCountedObject {
     /// returns character width
     int charWidth(dchar ch) {
         Glyph * g = getCharGlyph(ch);
-        return !g ? 0 : g.width;
+        return !g ? 0 : g.widthPixels;
+    }
+
+    protected bool _allowKerning;
+    /// override to enable kerning support
+    @property bool allowKerning() {
+        return false;
+    }
+    /// override to enable kerning support
+    @property void allowKerning(bool allow) {
+        _allowKerning = allow;
+    }
+
+    /// override to implement kerning offset calculation
+    int getKerningOffset(dchar prevChar, dchar currentChar) {
+        return 0;
     }
 
     /*******************************************************************************************
@@ -209,50 +232,72 @@ class Font : RefCountedObject {
             return 0;
         const dchar * pstr = text.ptr;
         uint len = cast(uint)text.length;
-        if (widths.length < len)
-            widths.length = len + 1;
+        if (widths.length < len) {
+            widths.assumeSafeAppend;
+            widths.length = len + 16;
+        }
+        bool fixed = isFixed;
+        bool useKerning = allowKerning && !fixed;
+        int fixedCharWidth = charWidth('M');
         int x = 0;
         int charsMeasured = 0;
         int * pwidths = widths.ptr;
-        int tabWidth = spaceWidth * tabSize; // width of full tab in pixels
+        int spWidth = fixed ? fixedCharWidth : spaceWidth;
+        int tabWidth = spWidth * tabSize; // width of full tab in pixels
         tabOffset = tabOffset % tabWidth;
         if (tabOffset < 0)
             tabOffset += tabWidth;
+        dchar prevChar = 0;
         foreach(int i; 0 .. len) {
             //auto measureStart = std.datetime.Clock.currAppTick;
             dchar ch = pstr[i];
             if (ch == '\t') {
                 // measure tab
                 int tabPosition = (x + tabWidth - tabOffset) / tabWidth * tabWidth + tabOffset;
-                while (tabPosition < x + spaceWidth)
+                while (tabPosition < x + spWidth)
                     tabPosition += tabWidth;
                 pwidths[i] = tabPosition;
                 charsMeasured = i + 1;
                 x = tabPosition;
+                prevChar = 0;
                 continue;
             } else if (ch == '&' && (textFlags & (TextFlag.UnderlineHotKeys | TextFlag.HotKeys | TextFlag.UnderlineHotKeysWhenAltPressed))) {
                 pwidths[i] = x;
+                prevChar = 0;
                 continue; // skip '&' in hot key when measuring
             }
-            Glyph * glyph = getCharGlyph(pstr[i], true); // TODO: what is better
-            //auto measureEnd = std.datetime.Clock.currAppTick;
-            //auto duration = measureEnd - measureStart;
-            //if (duration.length > 10)
-            //    Log.d("ft measureText took ", duration.length, " ticks");
-            if (glyph is null) {
-                // if no glyph, use previous width - treat as zero width
+            if (fixed) {
+                // fast calculation for fixed pitch
+                x += fixedCharWidth;
                 pwidths[i] = x;
-                continue;
+                charsMeasured = i + 1;
+            } else {
+                Glyph * glyph = getCharGlyph(pstr[i], true); // TODO: what is better
+                //auto measureEnd = std.datetime.Clock.currAppTick;
+                //auto duration = measureEnd - measureStart;
+                //if (duration.length > 10)
+                //    Log.d("ft measureText took ", duration.length, " ticks");
+                if (glyph is null) {
+                    // if no glyph, use previous width - treat as zero width
+                    pwidths[i] = x;
+                    prevChar = 0;
+                    continue;
+                }
+                int kerningDelta = useKerning && prevChar ? getKerningOffset(ch, prevChar) : 0;
+                int width = ((glyph.widthScaled + kerningDelta + 63) >> 6);
+                if (width < glyph.originX + glyph.correctedBlackBoxX)
+                    width = glyph.originX + glyph.correctedBlackBoxX;
+                int w = x + width; // using advance
+                //int w2 = x + glyph.originX + glyph.correctedBlackBoxX; // using black box
+                //if (w < w2) // choose bigger value
+                //    w = w2;
+                pwidths[i] = w;
+                x += width;
+                charsMeasured = i + 1;
             }
-            int w = x + glyph.width; // using advance
-            int w2 = x + glyph.originX + glyph.correctedBlackBoxX; // using black box
-            if (w < w2) // choose bigger value
-                w = w2;
-            pwidths[i] = w;
-            x += glyph.width;
-            charsMeasured = i + 1;
             if (x > maxWidth)
                 break;
+            prevChar = ch;
         }
         return charsMeasured;
     }
@@ -277,13 +322,20 @@ class Font : RefCountedObject {
      *          tabOffset = when string is drawn not from left position, use to move tab stops left/right
      *          textFlags = TextFlag bit set - to control underline, hotkey label processing, etc...
      ************************************************************************/
-    Point textSize(const dchar[] text, int maxWidth = MAX_WIDTH_UNSPECIFIED, int tabSize = 4, int tabOffset = 0, uint textFlags = 0) {
-        if (_textSizeBuffer.length < text.length + 1)
-            _textSizeBuffer.length = text.length + 1;
-        int charsMeasured = measureText(text, _textSizeBuffer, maxWidth, tabSize, tabOffset, textFlags);
+    Point textSize(dstring text, int maxWidth = MAX_WIDTH_UNSPECIFIED, int tabSize = 4, int tabOffset = 0, uint textFlags = 0) {
+        return textSizeMemoized(this, text, maxWidth, tabSize, tabOffset, textFlags);
+    }
+
+    import std.functional;
+    alias textSizeMemoized = memoize!(Font.textSizeImpl);
+
+    static Point textSizeImpl(Font font, const dchar[] text, int maxWidth = MAX_WIDTH_UNSPECIFIED, int tabSize = 4, int tabOffset = 0, uint textFlags = 0) {
+        if (font._textSizeBuffer.length < text.length + 1)
+            font._textSizeBuffer.length = text.length + 1;
+        int charsMeasured = font.measureText(text, font._textSizeBuffer, maxWidth, tabSize, tabOffset, textFlags);
         if (charsMeasured < 1)
             return Point(0,0);
-        return Point(_textSizeBuffer[charsMeasured - 1], height);
+        return Point(font._textSizeBuffer[charsMeasured - 1], font.height);
     }
 
     /*****************************************************************************************
@@ -455,7 +507,6 @@ class Font : RefCountedObject {
 
     void clear() {}
 
-    ~this() { clear(); }
 }
 alias FontRef = Ref!Font;
 

@@ -1,10 +1,11 @@
-module dlangui.platforms.console.dconsole;
+module dlangui.platforms.ansi_console.dconsole;
 
 
 public import dlangui.core.config;
 static if (BACKEND_CONSOLE):
 
 import std.stdio;
+import dlangui.core.logger;
 
 version(Windows) {
     import core.sys.windows.winbase;
@@ -244,11 +245,22 @@ class Console {
                 char ch = 0;
                 int res = cast(int)read(STDIN_FILENO, &ch, 1);
                 if (res < 0) {
-                    switch (errno) {
+                    auto err = errno;
+                    switch (err) {
                         case EBADF:
+                            Log.e("rawRead stdin EINVAL - stopping terminal");
+                            _stopped = true;
+                            return null;
                         case EFAULT:
+                            Log.e("rawRead stdin EINVAL - stopping terminal");
+                            _stopped = true;
+                            return null;
                         case EINVAL:
+                            Log.e("rawRead stdin EINVAL - stopping terminal");
+                            _stopped = true;
+                            return null;
                         case EIO:
+                            Log.e("rawRead stdin EIO - stopping terminal");
                             _stopped = true;
                             return null;
                         default:
@@ -276,8 +288,18 @@ class Console {
         }
         bool rawWrite(string s) {
             import core.sys.posix.unistd;
+            import core.stdc.errno;
             int res = cast(int)write(STDOUT_FILENO, s.ptr, s.length);
             if (res < 0) {
+                auto err = errno;
+                while (err == EAGAIN) {
+                    //debug Log.d("rawWrite error EAGAIN - will retry");
+                    res = cast(int)write(STDOUT_FILENO, s.ptr, s.length);
+                    if (res >= 0)
+                        return (res > 0);
+                    err = errno;
+                }
+                Log.e("rawWrite error ", err, " - stopping terminal");
                 _stopped = true;
             }
             return (res > 0);
@@ -814,10 +836,17 @@ class Console {
     protected ButtonDetails _mbutton;
     protected ButtonDetails _rbutton;
 
+    void stop() {
+        // set stopped flag
+        _stopped = true;
+    }
+
     /// wait for input, handle input
     bool pollInput() {
-        if (_stopped)
+        if (_stopped) {
+            debug Log.i("Console _stopped flag is set - returning false from pollInput");
             return false;
+        }
         version(Windows) {
             INPUT_RECORD record;
             DWORD eventsRead;

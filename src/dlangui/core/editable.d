@@ -450,6 +450,39 @@ struct LineSpan {
     int start;
     /// number of lines it spans
     int len;
+    /// the wrapping points
+    WrapPoint[] wrapPoints;
+    /// the wrapped text
+    dstring[] wrappedContent;
+    
+    enum WrapPointInfo : bool {
+        Position,
+        Width,
+    }
+    
+    ///Adds up either positions or widths to a wrapLine
+    int accumulation(int wrapLine, bool wrapPointInfo)
+    {
+        int total;
+        for (int i; i < wrapLine; i++)
+        {
+            if (i < this.wrapPoints.length - 1)
+            {
+                int curVal;
+                curVal = wrapPointInfo ? this.wrapPoints[i].wrapWidth : this.wrapPoints[i].wrapPos;
+                total += curVal;
+            }
+        }
+        return total;
+    }
+}
+
+///Holds info about a word wrapping point
+struct WrapPoint {
+    ///The relative wrapping position (related to TextPosition.pos)
+    int wrapPos;
+    ///The associated calculated width of the wrapLine
+    int wrapWidth;
 }
 
 /// interface for custom syntax highlight, comments toggling, smart indents, and other language dependent features for source code editors
@@ -614,7 +647,7 @@ class EditableContent {
     @property EditStateMark[] editMarks() { return _editMarks; }
 
     /// returns all lines concatenated delimited by '\n'
-    @property dstring text() {
+    @property dstring text() const {
         if (_lines.length == 0)
             return "";
         if (_lines.length == 1)
@@ -1422,15 +1455,25 @@ class EditableContent {
     }
     /// load content from file
     bool load(string filename) {
+        import std.file : exists, isFile;
+        import std.exception : ErrnoException;
         clear();
+        if (!filename.exists || !filename.isFile) {
+            Log.e("Editable.load: File not found ", filename);
+            return false;
+        }
         try {
             InputStream f;
             f = new FileInputStream(filename);
             scope(exit) { f.close(); }
             bool res = load(f, filename);
             return res;
+        } catch (ErrnoException e) {
+            Log.e("Editable.load: Exception while trying to read file ", filename, " ", e.toString);
+            clear();
+            return false;
         } catch (Exception e) {
-            Log.e("Exception while trying to read file ", filename, " ", e.toString);
+            Log.e("Editable.load: Exception while trying to read file ", filename, " ", e.toString);
             clear();
             return false;
         }

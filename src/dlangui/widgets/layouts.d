@@ -521,7 +521,7 @@ class ResizerWidget : Widget {
 class LinearLayout : WidgetGroupDefaultDrawing {
     protected Orientation _orientation = Orientation.Vertical;
     /// returns linear layout orientation (Vertical, Horizontal)
-    @property Orientation orientation() { return _orientation; }
+    @property Orientation orientation() const { return _orientation; }
     /// sets linear layout orientation
     @property LinearLayout orientation(Orientation value) { _orientation = value; requestLayout(); return this; }
 
@@ -643,7 +643,7 @@ class FrameLayout : WidgetGroupDefaultDrawing {
         applyPadding(rc);
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
-            if (item.visibility != Visibility.Gone) {
+            if (item.visibility == Visibility.Visible) {
                 item.layout(rc);
             }
         }
@@ -657,6 +657,7 @@ class FrameLayout : WidgetGroupDefaultDrawing {
             Widget item = _children.get(i);
             if (item.compareId(ID)) {
                 item.visibility = Visibility.Visible;
+                item.requestLayout();
                 foundWidget = item;
                 found = true;
             } else {

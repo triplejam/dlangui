@@ -44,6 +44,28 @@ static if (ENABLE_OPENGL) {
 alias XWindow = x11.Xlib.Window;
 alias DWindow = dlangui.platforms.common.platform.Window;
 
+private struct MwmHints
+{
+    int flags;
+    int functions;
+    int decorations;
+    int input_mode;
+    int status;
+}
+
+private enum
+{
+    MWM_HINTS_FUNCTIONS = (1L << 0),
+    MWM_HINTS_DECORATIONS =  (1L << 1),
+
+    MWM_FUNC_ALL = (1L << 0),
+    MWM_FUNC_RESIZE = (1L << 1),
+    MWM_FUNC_MOVE = (1L << 2),
+    MWM_FUNC_MINIMIZE = (1L << 3),
+    MWM_FUNC_MAXIMIZE = (1L << 4),
+    MWM_FUNC_CLOSE = (1L << 5)
+}
+
 private __gshared
 {
     Display * x11display;
@@ -51,7 +73,6 @@ private __gshared
     int x11screen;
     XIM xim;
 
-    string localClipboardContent;
     bool _enableOpengl = false;
 
     Cursor[CursorType.Hand + 1] x11cursors;
@@ -74,10 +95,13 @@ private __gshared
     Atom   atom_NET_WM_STATE_HIDDEN;
     Atom   atom_NET_WM_STATE_FULLSCREEN;
 
+    Atom   atom_MOTIF_WM_HINTS;
+
     Atom   atom_DLANGUI_TIMER_EVENT;
     Atom   atom_DLANGUI_TASK_EVENT;
     Atom   atom_DLANGUI_CLOSE_WINDOW_EVENT;
     Atom   atom_DLANGUI_CLIPBOARD_BUFFER;
+    Atom   atom_DLANGUI_REDRAW_EVENT;
 }
 
 static void setupX11Atoms()
@@ -98,11 +122,13 @@ static void setupX11Atoms()
     atom_NET_WM_STATE_MAXIMIZED_HORZ = XInternAtom(x11display, "_NET_WM_STATE_MAXIMIZED_HORZ", True);
     atom_NET_WM_STATE_HIDDEN = XInternAtom(x11display, "_NET_WM_STATE_HIDDEN", True);
     atom_NET_WM_STATE_FULLSCREEN = XInternAtom(x11display, "_NET_WM_STATE_FULLSCREEN", True);
+    atom_MOTIF_WM_HINTS = XInternAtom(x11display, "_MOTIF_WM_HINTS", True);
 
     atom_DLANGUI_TIMER_EVENT     = XInternAtom(x11display, "DLANGUI_TIMER_EVENT", False);
     atom_DLANGUI_TASK_EVENT     = XInternAtom(x11display, "DLANGUI_TASK_EVENT", False);
     atom_DLANGUI_CLOSE_WINDOW_EVENT = XInternAtom(x11display, "DLANGUI_CLOSE_WINDOW_EVENT", False);
     atom_DLANGUI_CLIPBOARD_BUFFER = XInternAtom(x11display, "DLANGUI_CLIPBOARD_BUFFER", False);
+    atom_DLANGUI_REDRAW_EVENT = XInternAtom(x11display, "DLANGUI_REDRAW_EVENT", False);
 }
 
 // Cursor font constants
@@ -230,7 +256,6 @@ class X11Window : DWindow {
     X11Window[] _children;
     X11Window _parent;
 
-    bool _needRedraw;
     int _cachedWidth, _cachedHeight;
 
     static if (ENABLE_OPENGL) {
@@ -314,6 +339,14 @@ class X11Window : DWindow {
         XSetWMProtocols(x11display, _win, &atom_WM_DELETE_WINDOW, 1);
         _windowState = WindowState.hidden;
 
+        auto classHint = XAllocClassHint();
+        if (classHint) {
+            classHint.res_name = platform._classname;
+            classHint.res_class = platform._classname;
+            XSetClassHint(x11display, _win, classHint);
+            XFree(classHint);
+        }
+
         _children.reserve(20);
         _parent = cast(X11Window) parent;
         if (_parent)
@@ -334,6 +367,13 @@ class X11Window : DWindow {
             }
             else
                 Log.w("Missing _NET_WM_STATE_FULLSCREEN atom");
+        }
+        if (flags & WindowFlag.Borderless) {
+            if (atom_MOTIF_WM_HINTS != None) {
+                MwmHints hints;
+                hints.flags = MWM_HINTS_DECORATIONS;
+                XChangeProperty(x11display, _win, atom_MOTIF_WM_HINTS, atom_MOTIF_WM_HINTS, 32, PropModeReplace, cast(ubyte*)&hints, hints.sizeof / 4);
+            }
         }
         if (flags & WindowFlag.Modal) {
             if (_parent) {
@@ -409,11 +449,19 @@ class X11Window : DWindow {
         }
     }
 
+    private bool hasVisibleModalChild() {
+        foreach (X11Window w;_children) {
+            if (w.flags & WindowFlag.Modal && w._windowState != WindowState.hidden)
+                return true;
+        }
+        return false;
+    }
+
     /// show window
     override void show() {
         Log.d("X11Window.show");
         XMapRaised(x11display, _win);
-        XFlush(x11display);
+
         static if (ENABLE_OPENGL) {
             if (_enableOpengl) {
                 _glc = glXCreateContext(x11display, x11visual, null, GL_TRUE);
@@ -445,6 +493,7 @@ class X11Window : DWindow {
 
             _mainWidget.setFocus();
         }
+        XFlush(x11display);
     }
 
     override protected void handleWindowStateChange(WindowState newState, Rect newWindowRect = RECT_VALUE_IS_NOT_SET) {
@@ -486,10 +535,8 @@ class X11Window : DWindow {
                 }
                 break;
             case WindowState.minimized:
-                if (atom_NET_WM_STATE != None && atom_NET_WM_STATE_HIDDEN != None) {
-                    changeWindowState(_NET_WM_STATE_ADD, atom_NET_WM_STATE_HIDDEN);
+                if (XIconifyWindow(x11display, _win, x11screen))
                     result = true;
-                }
                 break;
             case WindowState.hidden:
                 XUnmapWindow(x11display, _win);
@@ -578,7 +625,7 @@ class X11Window : DWindow {
         return _isActive;
     }
 
-    override @property dstring windowCaption() {
+    override @property dstring windowCaption() const {
         return _caption;
     }
 
@@ -621,12 +668,18 @@ class X11Window : DWindow {
         XChangeProperty(x11display, _win, atom_NET_WM_ICON, XA_CARDINAL, 32, PropModeReplace, cast(ubyte*)propData.ptr, cast(int)propData.length);
     }
 
+    uint _lastRedrawEventCode;
     /// request window redraw
     override void invalidate() {
-        if (!_needRedraw) {
-            debug(x11) Log.d("Window.invalidate()");
-            _needRedraw = true;
-        }
+        XEvent ev;
+        ev.xclient.type = ClientMessage;
+        ev.xclient.message_type = atom_DLANGUI_REDRAW_EVENT;
+        ev.xclient.window = _win;
+        ev.xclient.display = x11display;
+        ev.xclient.format = 32;
+        ev.xclient.data.l[0] = ++_lastRedrawEventCode;
+        XSendEvent(x11display, _win, false, StructureNotifyMask, &ev);
+        XFlush(x11display);
     }
 
     /// close window
@@ -698,7 +751,7 @@ class X11Window : DWindow {
     }
 
     void redraw() {
-        _needRedraw = false;
+        _lastRedrawEventCode = 0;
         //Use values cached by ConfigureNotify to avoid XGetWindowAttributes call.
         //XWindowAttributes window_attributes_return;
         //XGetWindowAttributes(x11display, _win, &window_attributes_return);
@@ -718,14 +771,39 @@ class X11Window : DWindow {
     protected ButtonDetails _mbutton;
     protected ButtonDetails _rbutton;
 
-    ushort convertMouseFlags(uint flags) {
+    // x11 gives flags from time prior event so if left button is pressed there is not Button1Mask
+    ushort convertMouseFlags(uint flags, MouseButton btn, bool pressed) {
         ushort res = 0;
-        if (flags & Button1Mask)
-            res |= MouseFlag.LButton;
-        if (flags & Button2Mask)
-            res |= MouseFlag.RButton;
-        if (flags & Button3Mask)
-            res |= MouseFlag.MButton;
+        if (btn == MouseButton.Left) {
+            if (pressed)
+                res |= MouseFlag.LButton;
+            else
+                res &= ~MouseFlag.LButton;
+        }
+        else
+            if (flags & Button1Mask)
+                res |= MouseFlag.LButton;
+
+        if (btn == MouseButton.Middle) {
+            if (pressed)
+                res |= MouseFlag.MButton;
+            else
+                res &= ~MouseFlag.MButton;
+        }
+        else
+            if (flags & Button2Mask)
+                res |= MouseFlag.MButton;
+
+        if (btn == MouseButton.Right) {
+            if (pressed)
+                res |= MouseFlag.RButton;
+            else
+                res &= ~MouseFlag.RButton;
+        }
+        else
+            if (flags & Button3Mask)
+                res |= MouseFlag.RButton;
+
         return res;
     }
 
@@ -733,9 +811,9 @@ class X11Window : DWindow {
         if (button == Button1)
             return MouseButton.Left;
         if (button == Button2)
-            return MouseButton.Right;
-        if (button == Button3)
             return MouseButton.Middle;
+        if (button == Button3)
+            return MouseButton.Right;
         return MouseButton.None;
     }
 
@@ -763,7 +841,9 @@ class X11Window : DWindow {
             if (wheelDelta)
                 event = new MouseEvent(action, MouseButton.None, lastFlags, lastx, lasty, wheelDelta);
         } else {
-            lastFlags = convertMouseFlags(state);
+            MouseButton btn = convertMouseButton(button);
+            lastFlags = convertMouseFlags(state, btn, action == MouseAction.ButtonDown);
+
             if (_keyFlags & KeyFlag.Shift)
                 lastFlags |= MouseFlag.Shift;
             if (_keyFlags & KeyFlag.Control)
@@ -772,7 +852,6 @@ class X11Window : DWindow {
                 lastFlags |= MouseFlag.Alt;
             lastx = cast(short)x;
             lasty = cast(short)y;
-            MouseButton btn = convertMouseButton(button);
             event = new MouseEvent(action, btn, lastFlags, lastx, lasty);
         }
         if (event) {
@@ -793,6 +872,7 @@ class X11Window : DWindow {
             event.lbutton = _lbutton;
             event.rbutton = _rbutton;
             event.mbutton = _mbutton;
+
             bool res = dispatchMouseEvent(event);
             if (res) {
                 debug(mouse) Log.d("Calling update() after mouse event");
@@ -1203,10 +1283,13 @@ private immutable int TIMER_EVENT = 8;
 class X11Platform : Platform {
 
     this() {
+        import std.file : thisExePath;
+        import std.path : baseName;
+        _classname = (baseName(thisExePath()) ~ "\0").dup.ptr;
     }
 
     private X11Window[XWindow] _windowMap;
-    private X11Window[] _windowList;
+    private char* _classname;
 
     /**
      * create window
@@ -1224,7 +1307,6 @@ class X11Platform : Platform {
         int newheight = height;
         X11Window window = new X11Window(this, windowCaption, parent, flags, newwidth, newheight);
         _windowMap[window._win] = window;
-        _windowList ~= window;
         return window;
     }
 
@@ -1253,17 +1335,6 @@ class X11Platform : Platform {
         XSendEvent(x11display2, window._win, false, StructureNotifyMask, &ev);
         XFlush(x11display2);
         XUnlockDisplay(x11display2);
-
-        for (uint i = 0; i < _windowList.length; i++) {
-            if (w is _windowList[i]) {
-                for (uint j = i; j + 1 < _windowList.length; j++)
-                    _windowList[j] = _windowList[j + 1];
-                _windowList[$ - 1] = null;
-                _windowList.length--;
-                break;
-            }
-        }
-
     }
 
     bool handleTimers() {
@@ -1281,375 +1352,433 @@ class X11Platform : Platform {
         return _windowMap.length == 0;
     }
 
-    /**
-     * Starts application message loop.
-     *
-     * When returned from this method, application is shutting down.
-     */
-    override int enterMessageLoop() {
-        import core.thread;
-        XEvent event;        /* the XEvent declaration !!! */
-        KeySym key;        /* a dealie-bob to handle KeyPress Events */
-        char[255] text;        /* a char buffer for KeyPress Events */
-
-        Log.d("enterMessageLoop()");
-        XComposeStatus compose;
-
+    protected int numberOfPendingEvents(int msecs = 10)
+    {
         import core.sys.posix.sys.select;
         int x11displayFd = ConnectionNumber(x11display);
         fd_set fdSet;
         FD_ZERO(&fdSet);
         FD_SET(x11displayFd, &fdSet);
         scope(exit) FD_ZERO(&fdSet);
-        while(!allWindowsClosed()) {
-            // Note:  only events we set the mask for are detected!
-            foreach(win; _windowMap) {
-                if (win._needRedraw) {
-                    win.redraw();
-                }
-            }
-            XFlush(x11display);
-            int eventsInQueue = XEventsQueued(x11display, QueuedAlready);
-            if (!eventsInQueue) {
-                import core.stdc.errno;
-                int selectResult;
-                do {
-                    timeval zeroTime;
-                    selectResult = select(x11displayFd + 1, &fdSet, null, null, &zeroTime);
-                } while(selectResult == -1 && errno == EINTR);
-                if (selectResult < 0) {
-                    Log.e("X11: display fd select error");
-                } else if (selectResult == 1) {
-                    Log.d("X11: XPending");
-                    eventsInQueue = XPending(x11display);
-                }
-            }
-            if (!eventsInQueue) {
-                debug(x11) Log.d("X11: Sleeping");
-                Thread.sleep(dur!("msecs")(10));
-            }
-            foreach(eventIndex; 0..eventsInQueue)
-            {
-                if (allWindowsClosed())
-                    break;
-                XNextEvent(x11display, &event);
-                switch (event.type) {
-                    case ConfigureNotify:
-                        X11Window w = findWindow(event.xconfigure.window);
-                        if (w) {
-                            w._cachedWidth = event.xconfigure.width;
-                            w._cachedHeight = event.xconfigure.height;
-                            w.handleWindowStateChange(WindowState.unspecified, Rect(event.xconfigure.x, event.xconfigure.y, event.xconfigure.width, event.xconfigure.height));
-                        } else {
-                            Log.e("ConfigureNotify: Window not found");
-                        }
-                        break;
-                    case PropertyNotify:
-                        if (event.xproperty.atom == atom_NET_WM_STATE && event.xproperty.state == PropertyNewValue) {
-                            X11Window w = findWindow(event.xproperty.window);
-                            if (w) {
-                                Atom type;
-                                int format;
-                                ubyte* properties;
-                                c_ulong dataLength, overflow;
-                                if (XGetWindowProperty(x11display, event.xproperty.window, atom_NET_WM_STATE,
-                                    0, int.max/4, False, AnyPropertyType, &type, &format, &dataLength, &overflow, &properties) == 0) {
-                                    scope(exit) XFree(properties);
-                                    // check for minimized
-                                    bool minimized = false;
-                                    for (int i=0; i < dataLength ; i++) {
-                                        if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_HIDDEN) {
-                                            w.handleWindowStateChange(WindowState.minimized);
-                                            minimized = true;
-                                        }
-                                    }
-                                    if (!minimized) {
-                                        bool maximizedH = false;
-                                        bool maximizedV = false;
-                                        for (int i=0; i < dataLength ; i++) {
-                                            if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_MAXIMIZED_VERT)
-                                                maximizedV = true;
-                                            if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_MAXIMIZED_HORZ)
-                                                maximizedH = true;
-                                        }
 
-                                        if (maximizedV && maximizedH)
-                                            w.handleWindowStateChange(WindowState.maximized);
-                                        else
-                                            w.handleWindowStateChange(WindowState.normal);
+        int eventsInQueue = XEventsQueued(x11display, QueuedAlready);
+        if (!eventsInQueue) {
+            import core.stdc.errno;
+            int selectResult;
+            do {
+                timeval timeout;
+                timeout.tv_usec = msecs;
+                selectResult = select(x11displayFd + 1, &fdSet, null, null, &timeout);
+            } while(selectResult == -1 && errno == EINTR);
+            if (selectResult < 0) {
+                Log.e("X11: display fd select error");
+            } else if (selectResult == 1) {
+                //Log.d("X11: XPending");
+                eventsInQueue = XPending(x11display);
+            }
+        }
+        return eventsInQueue;
+    }
 
-                                    }
+    protected void processXEvent(ref XEvent event)
+    {
+        XComposeStatus compose;
+        switch (event.type) {
+            case ConfigureNotify:
+                X11Window w = findWindow(event.xconfigure.window);
+                if (w) {
+                    w._cachedWidth = event.xconfigure.width;
+                    w._cachedHeight = event.xconfigure.height;
+                    w.handleWindowStateChange(WindowState.unspecified, Rect(event.xconfigure.x, event.xconfigure.y, event.xconfigure.width, event.xconfigure.height));
+                } else {
+                    Log.e("ConfigureNotify: Window not found");
+                }
+                break;
+            case PropertyNotify:
+                if (event.xproperty.atom == atom_NET_WM_STATE && event.xproperty.state == PropertyNewValue) {
+                    X11Window w = findWindow(event.xproperty.window);
+                    if (w) {
+                        Atom type;
+                        int format;
+                        ubyte* properties;
+                        c_ulong dataLength, overflow;
+                        if (XGetWindowProperty(x11display, event.xproperty.window, atom_NET_WM_STATE,
+                            0, int.max/4, False, AnyPropertyType, &type, &format, &dataLength, &overflow, &properties) == 0) {
+                            scope(exit) XFree(properties);
+                            // check for minimized
+                            bool minimized = false;
+                            for (int i=0; i < dataLength ; i++) {
+                                if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_HIDDEN) {
+                                    w.handleWindowStateChange(WindowState.minimized);
+                                    minimized = true;
                                 }
                             }
-                        }
-                        break;
-                    case MapNotify:
-                        X11Window w = findWindow(event.xmap.window);
-                        if (w) {
-                            w.handleWindowStateChange(WindowState.normal);
-                        }
-                        break;
-                    case UnmapNotify:
-                        X11Window w = findWindow(event.xunmap.window);
-                        if (w) {
-                            w.handleWindowStateChange(WindowState.hidden);
-                        }
-                        break;
-                    case Expose:
-                        if (event.xexpose.count == 0) {
-                            X11Window w = findWindow(event.xexpose.window);
-                            if (w) {
-                                w.invalidate();
-                            } else {
-                                Log.e("Expose: Window not found");
-                            }
-                        } else {
-                            Log.d("Expose: non-0 count");
-                        }
-                        break;
-                    case KeyPress:
-                        Log.d("X11: KeyPress event");
-                        X11Window w = findWindow(event.xkey.window);
-                        if (w) {
-                            char[100] buf;
-                            KeySym ks;
-                            Status s;
-                            if (!w.xic) {
-                                w.xic = XCreateIC(xim,
-                                    XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-                                    XNClientWindow, w._win, 0);
-                                if (!w.xic) {
-                                    Log.e("Cannot create input context");
+                            if (!minimized) {
+                                bool maximizedH = false;
+                                bool maximizedV = false;
+                                for (int i=0; i < dataLength ; i++) {
+                                    if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_MAXIMIZED_VERT)
+                                        maximizedV = true;
+                                    if (((cast(c_ulong*)properties)[i]) == atom_NET_WM_STATE_MAXIMIZED_HORZ)
+                                        maximizedH = true;
                                 }
-                            }
 
-                            if (!w.xic)
-                                XLookupString(&event.xkey, buf.ptr, buf.length - 1, &ks, &compose);
-                            else {
-                                Xutf8LookupString(w.xic, &event.xkey, buf.ptr, cast(int)buf.length - 1, &ks, &s);
-                                if (s != XLookupChars && s != XLookupBoth)
-                                    XLookupString(&event.xkey, buf.ptr, buf.length - 1, &ks, &compose);
+                                if (maximizedV && maximizedH)
+                                    w.handleWindowStateChange(WindowState.maximized);
+                                else
+                                    w.handleWindowStateChange(WindowState.normal);
+
                             }
-                            foreach(ref ch; buf) {
-                                if (ch == 255 || ch < 32 || ch == 127)
-                                    ch = 0;
-                            }
-                            string txt = fromStringz(buf.ptr).dup;
-                            import std.utf;
-                            dstring dtext;
-                            try {
-                                if (txt.length)
-                                    dtext = toUTF32(txt);
-                            } catch (UTFException e) {
-                                // ignore, invalid text
-                            }
-                            debug(x11) Log.d("X11: KeyPress event bytes=", txt.length, " text=", txt, " dtext=", dtext);
-                            if (dtext.length) {
-                                w.processTextInput(dtext, event.xkey.state);
-                            } else {
-                                w.processKeyEvent(KeyAction.KeyDown, cast(uint)ks,
-                                    //event.xkey.keycode,
-                                    event.xkey.state);
-                            }
-                        } else {
-                            Log.e("Window not found");
                         }
-                        break;
-                    case KeyRelease:
-                        Log.d("X11: KeyRelease event");
-                        X11Window w = findWindow(event.xkey.window);
-                        if (w) {
-                            char[100] buf;
-                            KeySym ks;
+                    }
+                }
+                break;
+            case MapNotify:
+                X11Window w = findWindow(event.xmap.window);
+                if (w) {
+                    w.handleWindowStateChange(WindowState.normal);
+                }
+                break;
+            case UnmapNotify:
+                X11Window w = findWindow(event.xunmap.window);
+                if (w) {
+                    w.handleWindowStateChange(WindowState.hidden);
+                }
+                break;
+            case Expose:
+                if (event.xexpose.count == 0) {
+                    X11Window w = findWindow(event.xexpose.window);
+                    if (w) {
+                        w.invalidate();
+                    } else {
+                        Log.e("Expose: Window not found");
+                    }
+                } else {
+                    Log.d("Expose: non-0 count");
+                }
+                break;
+            case KeyPress:
+                Log.d("X11: KeyPress event");
+                X11Window w = findWindow(event.xkey.window);
+                if (w) {
+                    char[100] buf;
+                    KeySym ks;
+                    Status s;
+                    if (!w.xic) {
+                        w.xic = XCreateIC(xim,
+                            XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+                            XNClientWindow, w._win, 0);
+                        if (!w.xic) {
+                            Log.e("Cannot create input context");
+                        }
+                    }
+
+                    if (!w.xic)
+                        XLookupString(&event.xkey, buf.ptr, buf.length - 1, &ks, &compose);
+                    else {
+                        Xutf8LookupString(w.xic, &event.xkey, buf.ptr, cast(int)buf.length - 1, &ks, &s);
+                        if (s != XLookupChars && s != XLookupBoth)
                             XLookupString(&event.xkey, buf.ptr, buf.length - 1, &ks, &compose);
-                            w.processKeyEvent(KeyAction.KeyUp, cast(uint)ks,
-                                //event.xkey.keycode,
-                                event.xkey.state);
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case ButtonPress:
-                        Log.d("X11: ButtonPress event");
-                        X11Window w = findWindow(event.xbutton.window);
-                        if (w) {
-                            w.processMouseEvent(MouseAction.ButtonDown, event.xbutton.button, event.xbutton.state, event.xbutton.x, event.xbutton.y);
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case ButtonRelease:
-                        Log.d("X11: ButtonRelease event");
-                        X11Window w = findWindow(event.xbutton.window);
-                        if (w) {
-                            w.processMouseEvent(MouseAction.ButtonUp, event.xbutton.button, event.xbutton.state, event.xbutton.x, event.xbutton.y);
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case MotionNotify:
-                        debug(x11) Log.d("X11: MotionNotify event");
-                        X11Window w = findWindow(event.xmotion.window);
-                        if (w) {
-                            w.processMouseEvent(MouseAction.Move, 0, event.xmotion.state, event.xmotion.x, event.xmotion.y);
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case EnterNotify:
-                        Log.d("X11: EnterNotify event");
-                        X11Window w = findWindow(event.xcrossing.window);
-                        if (!w) {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case LeaveNotify:
-                        Log.d("X11: LeaveNotify event");
-                        X11Window w = findWindow(event.xcrossing.window);
-                        if (w) {
-                            w.processMouseEvent(MouseAction.Leave, 0, event.xcrossing.state, event.xcrossing.x, event.xcrossing.y);
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case CreateNotify:
-                        Log.d("X11: CreateNotify event");
-                        X11Window w = findWindow(event.xcreatewindow.window);
-                        if (!w) {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case DestroyNotify:
-                        Log.d("X11: DestroyNotify event");
-                        break;
-                    case ResizeRequest:
-                        Log.d("X11: ResizeRequest event");
-                        X11Window w = findWindow(event.xresizerequest.window);
-                        if (!w) {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    case FocusIn:
-                        Log.d("X11: FocusIn event");
-                        X11Window w = findWindow(event.xfocus.window);
-                        if (w)
-                            w.handleWindowActivityChange(true);
-                        else
-                            Log.e("Window not found");
-                        break;
-                    case FocusOut:
-                        Log.d("X11: FocusOut event");
-                        X11Window w = findWindow(event.xfocus.window);
-                        if (w)
-                            w.handleWindowActivityChange(false);
-                        else
-                            Log.e("Window not found");
-                        break;
-                    case KeymapNotify:
-                        Log.d("X11: KeymapNotify event");
-                        X11Window w = findWindow(event.xkeymap.window);
-                        break;
-                    case SelectionClear:
-                        Log.d("X11: SelectionClear event");
-                        break;
-                    case SelectionRequest:
-                        debug(x11) Log.d("X11: SelectionRequest event");
-                        if (event.xselectionrequest.owner in _windowMap) {
-                            XSelectionRequestEvent *selectionRequest = &event.xselectionrequest;
-
-                            XEvent selectionEvent;
-                            memset(&selectionEvent, 0, selectionEvent.sizeof);
-                            selectionEvent.xany.type = SelectionNotify;
-                            selectionEvent.xselection.selection = selectionRequest.selection;
-                            selectionEvent.xselection.target = selectionRequest.target;
-                            selectionEvent.xselection.property = None;
-                            selectionEvent.xselection.requestor = selectionRequest.requestor;
-                            selectionEvent.xselection.time = selectionRequest.time;
-
-                            if (selectionRequest.target == XA_STRING || selectionRequest.target == atom_UTF8_STRING) {
-                                static if (false) {
-                                    int currentSelectionFormat;
-                                    Atom currentSelectionType;
-                                    c_ulong selectionDataLength, overflow;
-                                    ubyte* selectionDataPtr;
-                                    if (XGetWindowProperty(x11display, DefaultRootWindow(x11display), atom_DLANGUI_CLIPBOARD_BUFFER,
-                                        0, int.max/4, False, selectionRequest.target,
-                                        &currentSelectionType, &currentSelectionFormat, &selectionDataLength,
-                                        &overflow, &selectionDataPtr) == 0)
-                                    {
-                                        scope(exit) XFree(selectionDataPtr);
-                                        XChangeProperty(x11display, selectionRequest.requestor, selectionRequest.property,
-                                            selectionRequest.target, 8, PropModeReplace,
-                                            selectionDataPtr, cast(int)selectionDataLength);
-                                    }
-                                } else {
-                                    XChangeProperty(x11display, selectionRequest.requestor, selectionRequest.property,
-                                            selectionRequest.target, 8, PropModeReplace,
-                                            cast(ubyte*)localClipboardContent, cast(int)localClipboardContent.length);
-                                }
-                                selectionEvent.xselection.property = selectionRequest.property;
-                            } else if (selectionRequest.target == atom_TARGETS) {
-                                Atom[3] supportedFormats = [atom_UTF8_STRING, XA_STRING, atom_TARGETS];
-                                XChangeProperty(x11display, selectionRequest.requestor, selectionRequest.property,
-                                    XA_ATOM, 32, PropModeReplace,
-                                    cast(ubyte*)supportedFormats.ptr, cast(int)supportedFormats.length);
-                                selectionEvent.xselection.property = selectionRequest.property;
-                            }
-                            XSendEvent(x11display, selectionRequest.requestor, False, 0, &selectionEvent);
-                        }
-                        break;
-                    case SelectionNotify:
-                        Log.d("X11: SelectionNotify event");
-                        X11Window w = findWindow(event.xselection.requestor);
-                        break;
-                    case ClientMessage:
-                        debug(x11) Log.d("X11: ClientMessage event");
-                        X11Window w = findWindow(event.xclient.window);
-                        if (w) {
-                            if (event.xclient.message_type == atom_DLANGUI_TASK_EVENT) {
-                                w.handlePostedEvent(cast(uint)event.xclient.data.l[0]);
-                            } else if (event.xclient.message_type == atom_DLANGUI_TIMER_EVENT) {
-                                w.handleTimer();
-                            } else if (event.xclient.message_type == atom_WM_PROTOCOLS) {
-                                Log.d("Handling WM_PROTOCOLS");
-                                if ((event.xclient.format == 32) && (event.xclient.data.l[0]) == atom_WM_DELETE_WINDOW) {
-                                    Log.d("Handling WM_DELETE_WINDOW");
-                                    _windowMap.remove(w._win);
-                                    destroy(w);
-                                }
-                            } else if (event.xclient.message_type == atom_DLANGUI_CLOSE_WINDOW_EVENT) {
-                                _windowMap.remove(w._win);
-                                destroy(w);
-                            }
-                        } else {
-                            Log.e("Window not found");
-                        }
-                        break;
-                    default:
-                        break;
+                    }
+                    foreach(ref ch; buf) {
+                        if (ch == 255 || ch < 32 || ch == 127)
+                            ch = 0;
+                    }
+                    string txt = fromStringz(buf.ptr).dup;
+                    import std.utf;
+                    dstring dtext;
+                    try {
+                        if (txt.length)
+                            dtext = toUTF32(txt);
+                    } catch (UTFException e) {
+                        // ignore, invalid text
+                    }
+                    debug(x11) Log.d("X11: KeyPress event bytes=", txt.length, " text=", txt, " dtext=", dtext);
+                    if (dtext.length) {
+                        w.processTextInput(dtext, event.xkey.state);
+                    } else {
+                        w.processKeyEvent(KeyAction.KeyDown, cast(uint)ks,
+                            //event.xkey.keycode,
+                            event.xkey.state);
+                    }
+                } else {
+                    Log.e("Window not found");
                 }
-            }
+                break;
+            case KeyRelease:
+                Log.d("X11: KeyRelease event");
+                X11Window w = findWindow(event.xkey.window);
+                if (w) {
+                    char[100] buf;
+                    KeySym ks;
+                    XLookupString(&event.xkey, buf.ptr, buf.length - 1, &ks, &compose);
+                    w.processKeyEvent(KeyAction.KeyUp, cast(uint)ks,
+                        //event.xkey.keycode,
+                        event.xkey.state);
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case ButtonPress:
+                Log.d("X11: ButtonPress event");
+                X11Window w = findWindow(event.xbutton.window);
+                if (w) {
+                    if (event.xbutton.button == 4 || event.xbutton.button == 5) {
+                        w.processMouseEvent(MouseAction.Wheel, 0, 0, 0, event.xbutton.button == 4 ? 1 : -1);
+                    } else {
+                        w.processMouseEvent(MouseAction.ButtonDown, event.xbutton.button, event.xbutton.state, event.xbutton.x, event.xbutton.y);
+                    }
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case ButtonRelease:
+                Log.d("X11: ButtonRelease event");
+                X11Window w = findWindow(event.xbutton.window);
+                if (w) {
+                    w.processMouseEvent(MouseAction.ButtonUp, event.xbutton.button, event.xbutton.state, event.xbutton.x, event.xbutton.y);
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case MotionNotify:
+                debug(x11) Log.d("X11: MotionNotify event");
+                X11Window w = findWindow(event.xmotion.window);
+                if (w) {
+                    w.processMouseEvent(MouseAction.Move, 0, event.xmotion.state, event.xmotion.x, event.xmotion.y);
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case EnterNotify:
+                Log.d("X11: EnterNotify event");
+                X11Window w = findWindow(event.xcrossing.window);
+                if (w) {
+                    w.processMouseEvent(MouseAction.Move, 0, event.xmotion.state, event.xcrossing.x, event.xcrossing.y);
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case LeaveNotify:
+                Log.d("X11: LeaveNotify event");
+                X11Window w = findWindow(event.xcrossing.window);
+                if (w) {
+                    w.processMouseEvent(MouseAction.Leave, 0, event.xcrossing.state, event.xcrossing.x, event.xcrossing.y);
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            case CreateNotify:
+                Log.d("X11: CreateNotify event");
+                X11Window w = findWindow(event.xcreatewindow.window);
+                if (!w) {
+                    Log.e("Window not found");
+                }
+                break;
+            case DestroyNotify:
+                Log.d("X11: DestroyNotify event");
+                break;
+            case ResizeRequest:
+                Log.d("X11: ResizeRequest event");
+                X11Window w = findWindow(event.xresizerequest.window);
+                if (!w) {
+                    Log.e("Window not found");
+                }
+                break;
+            case FocusIn:
+                Log.d("X11: FocusIn event");
+                X11Window w = findWindow(event.xfocus.window);
+                if (w)
+                    w.handleWindowActivityChange(true);
+                else
+                    Log.e("Window not found");
+                break;
+            case FocusOut:
+                Log.d("X11: FocusOut event");
+                X11Window w = findWindow(event.xfocus.window);
+                if (w)
+                    w.handleWindowActivityChange(false);
+                else
+                    Log.e("Window not found");
+                break;
+            case KeymapNotify:
+                Log.d("X11: KeymapNotify event");
+                X11Window w = findWindow(event.xkeymap.window);
+                break;
+            case SelectionClear:
+                Log.d("X11: SelectionClear event");
+                break;
+            case SelectionRequest:
+                debug(x11) Log.d("X11: SelectionRequest event");
+                if (event.xselectionrequest.owner in _windowMap) {
+                    XSelectionRequestEvent *selectionRequest = &event.xselectionrequest;
+
+                    XEvent selectionEvent;
+                    memset(&selectionEvent, 0, selectionEvent.sizeof);
+                    selectionEvent.xany.type = SelectionNotify;
+                    selectionEvent.xselection.selection = selectionRequest.selection;
+                    selectionEvent.xselection.target = selectionRequest.target;
+                    selectionEvent.xselection.property = None;
+                    selectionEvent.xselection.requestor = selectionRequest.requestor;
+                    selectionEvent.xselection.time = selectionRequest.time;
+
+                    if (selectionRequest.target == XA_STRING || selectionRequest.target == atom_UTF8_STRING) {
+                        int currentSelectionFormat;
+                        Atom currentSelectionType;
+                        c_ulong selectionDataLength, overflow;
+                        ubyte* selectionDataPtr;
+                        if (XGetWindowProperty(x11display, DefaultRootWindow(x11display), atom_DLANGUI_CLIPBOARD_BUFFER,
+                            0, int.max/4, False, selectionRequest.target,
+                            &currentSelectionType, &currentSelectionFormat, &selectionDataLength,
+                            &overflow, &selectionDataPtr) == 0)
+                        {
+                            scope(exit) XFree(selectionDataPtr);
+                            XChangeProperty(x11display, selectionRequest.requestor, selectionRequest.property,
+                                selectionRequest.target, 8, PropModeReplace,
+                                selectionDataPtr, cast(int)selectionDataLength);
+                        }
+                        selectionEvent.xselection.property = selectionRequest.property;
+                    } else if (selectionRequest.target == atom_TARGETS) {
+                        Atom[3] supportedFormats = [atom_UTF8_STRING, XA_STRING, atom_TARGETS];
+                        XChangeProperty(x11display, selectionRequest.requestor, selectionRequest.property,
+                            XA_ATOM, 32, PropModeReplace,
+                            cast(ubyte*)supportedFormats.ptr, cast(int)supportedFormats.length);
+                        selectionEvent.xselection.property = selectionRequest.property;
+                    }
+                    XSendEvent(x11display, selectionRequest.requestor, False, 0, &selectionEvent);
+                }
+                break;
+            case SelectionNotify:
+                debug(x11) Log.d("X11: SelectionNotify event");
+                X11Window w = findWindow(event.xselection.requestor);
+                if (w) {
+                    waitingForSelection = false;
+                }
+                break;
+            case ClientMessage:
+                debug(x11) Log.d("X11: ClientMessage event");
+                X11Window w = findWindow(event.xclient.window);
+                if (w) {
+                    if (event.xclient.message_type == atom_DLANGUI_TASK_EVENT) {
+                        w.handlePostedEvent(cast(uint)event.xclient.data.l[0]);
+                    } else if (event.xclient.message_type == atom_DLANGUI_TIMER_EVENT) {
+                        w.handleTimer();
+                    } else if (event.xclient.message_type == atom_DLANGUI_REDRAW_EVENT) {
+                        if (event.xclient.data.l[0] == w._lastRedrawEventCode)
+                            w.redraw();
+                    } else if (event.xclient.message_type == atom_WM_PROTOCOLS) {
+                        Log.d("Handling WM_PROTOCOLS");
+                        if ((event.xclient.format == 32) && (event.xclient.data.l[0]) == atom_WM_DELETE_WINDOW) {
+                            Log.d("Handling WM_DELETE_WINDOW");
+                            _windowMap.remove(w._win);
+                            destroy(w);
+                        }
+                    } else if (event.xclient.message_type == atom_DLANGUI_CLOSE_WINDOW_EVENT) {
+                        _windowMap.remove(w._win);
+                        destroy(w);
+                    }
+                } else {
+                    Log.e("Window not found");
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    protected void pumpEvents()
+    {
+        XFlush(x11display);
+        // Note:  only events we set the mask for are detected!
+        while(numberOfPendingEvents())
+        {
+            if (allWindowsClosed())
+                break;
+            XEvent event;        /* the XEvent declaration !!! */
+            XNextEvent(x11display, &event);
+            processXEvent(event);
+        }
+    }
+
+    /**
+     * Starts application message loop.
+     *
+     * When returned from this method, application is shutting down.
+     */
+    override int enterMessageLoop() {
+        Log.d("enterMessageLoop()");
+
+        while(!allWindowsClosed()) {
+            pumpEvents();
         }
         return 0;
     }
 
     /// check has clipboard text
     override bool hasClipboardText(bool mouseBuffer = false) {
-        return (localClipboardContent.length != 0);
+        const selectionType = mouseBuffer ? XA_PRIMARY : atom_CLIPBOARD;
+        return XGetSelectionOwner(x11display, selectionType) != None;
     }
 
+    protected bool waitingForSelection;
     /// retrieves text from clipboard (when mouseBuffer == true, use mouse selection clipboard - under linux)
     override dstring getClipboardText(bool mouseBuffer = false) {
-        return toUTF32(localClipboardContent);
+        const selectionType = mouseBuffer ? XA_PRIMARY : atom_CLIPBOARD;
+        auto owner = XGetSelectionOwner(x11display, selectionType);
+        if (owner == None) {
+            Log.d("Selection owner is none");
+            return ""d;
+        } else {
+            // Find any top-level window
+            XWindow xwindow;
+            foreach(w; _windowMap) {
+                if (w._parent is null && w._win != None) {
+                    xwindow = w._win;
+                    break;
+                }
+            }
+            if (xwindow != None) {
+                import std.datetime;
+                waitingForSelection = true;
+                XConvertSelection(x11display, selectionType, atom_UTF8_STRING, atom_DLANGUI_CLIPBOARD_BUFFER, xwindow, CurrentTime);
+                auto stopWaiting = Clock.currTime() + dur!"msecs"(500);
+                while(waitingForSelection) {
+                    if (stopWaiting <= Clock.currTime()) {
+                        waitingForSelection = false;
+                        setClipboardText(""d);
+                        Log.e("Waiting for clipboard contents timeout");
+                        return ""d;
+                    }
+                    pumpEvents();
+                }
+                Atom selectionTarget;
+                int selectionFormat;
+                c_ulong selectionDataLength, overflow;
+                ubyte* selectionDataPtr;
+                if (XGetWindowProperty(x11display, xwindow, atom_DLANGUI_CLIPBOARD_BUFFER, 0, int.max/4, False, 0, &selectionTarget, &selectionFormat, &selectionDataLength, &overflow, &selectionDataPtr) == 0)
+                {
+                    scope(exit) XFree(selectionDataPtr);
+                    if (selectionTarget == XA_STRING || selectionTarget == atom_UTF8_STRING) {
+                        char[] selectionText = cast(char[])selectionDataPtr[0..selectionDataLength];
+                        return toUTF32(selectionText);
+                    } else {
+                        Log.d("Selection type is not a string!");
+                    }
+                }
+            } else {
+                Log.d("Could not find any window to get selection");
+            }
+        }
+        return ""d;
     }
 
     /// sets text to clipboard (when mouseBuffer == true, use mouse selection clipboard - under linux)
     override void setClipboardText(dstring text, bool mouseBuffer = false) {
-        localClipboardContent = toUTF8(text);
         if (!mouseBuffer && atom_CLIPBOARD == None) {
             Log.e("No CLIPBOARD atom available");
             return;
         }
+        auto selection = mouseBuffer ? XA_PRIMARY : atom_CLIPBOARD;
         XWindow xwindow = None;
         // Find any top-level window
         foreach(w; _windowMap) {
@@ -1661,16 +1790,12 @@ class X11Platform : Platform {
             Log.e("Could not find window to save clipboard text");
             return;
         }
-        static if (false) {
-            // This is example of how setting clipboard contents can be implemented without global variable
-            auto textc = text.toUTF8;
-            XChangeProperty(x11display, DefaultRootWindow(x11display), atom_DLANGUI_CLIPBOARD_BUFFER, XA_STRING, 8, PropModeReplace, cast(ubyte*)textc.ptr, cast(int)textc.length);
-        }
 
-        if (mouseBuffer && XGetSelectionOwner(x11display, XA_PRIMARY) != xwindow) {
-            XSetSelectionOwner(x11display, XA_PRIMARY, xwindow, CurrentTime);
-        } else if (XGetSelectionOwner(x11display, atom_CLIPBOARD != xwindow)) {
-            XSetSelectionOwner(x11display, atom_CLIPBOARD, xwindow, CurrentTime);
+        auto textc = text.toUTF8;
+        XChangeProperty(x11display, DefaultRootWindow(x11display), atom_DLANGUI_CLIPBOARD_BUFFER, atom_UTF8_STRING, 8, PropModeReplace, cast(ubyte*)textc.ptr, cast(int)textc.length);
+
+        if (XGetSelectionOwner(x11display, selection) != xwindow) {
+            XSetSelectionOwner(x11display, selection, xwindow, CurrentTime);
         }
     }
 
@@ -1683,21 +1808,16 @@ class X11Platform : Platform {
 
     /// returns true if there is some modal window opened above this window, and this window should not process mouse/key input and should not allow closing
     override bool hasModalWindowsAbove(DWindow w) {
-        // override in platform specific class
-        for (uint i = 0; i + 1 < _windowList.length; i++) {
-            if (_windowList[i] is w) {
-                for (uint j = i + 1; j < _windowList.length; j++) {
-                    if (_windowList[j].flags & WindowFlag.Modal && _windowList[j].windowState != WindowState.hidden)
-                        return true;
-                }
-                return false;
-            }
+        X11Window x11Win = cast (X11Window) w;
+        if (x11Win) {
+            return x11Win.hasVisibleModalChild();
         }
         return false;
     }
 
     /// handle theme change: e.g. reload some themed resources
     override void onThemeChanged() {
+        super.onThemeChanged();
         foreach(w; _windowMap)
             w.dispatchThemeChanged();
     }

@@ -366,7 +366,7 @@ public:
         requestLayout();
         return this;
     }
-    immutable static int FOCUS_RECT_PADDING = 2;
+    static enum FOCUS_RECT_PADDING = 2;
     /// get padding (between background bounds and content of widget)
     @property Rect padding() const {
         // get max padding from style padding and background drawable padding
@@ -570,7 +570,7 @@ public:
     @property FontRef font() const { return stateStyle.font; }
 
     /// returns widget content text (override to support this)
-    @property dstring text() { return ""; }
+    @property dstring text() const { return ""; }
     /// sets widget content text (override to support this)
     @property Widget text(dstring s) { return this; }
     /// sets widget content text (override to support this)
@@ -637,19 +637,26 @@ public:
     /// sets layout weight (while resizing to fill parent, widget will be resized proportionally to this value)
     @property Widget layoutWeight(int value) { ownStyle.layoutWeight = value; return this; }
 
+    /// sets layoutWidth=FILL_PARENT and layoutHeight=FILL_PARENT
+    Widget fillParent() { return layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT); }
+    /// sets layoutWidth=FILL_PARENT
+    Widget fillHorizontal() { return layoutWidth(FILL_PARENT); }
+    /// sets layoutHeight=FILL_PARENT
+    Widget fillVertical() { return layoutHeight(FILL_PARENT); }
+
     /// returns widget visibility (Visible, Invisible, Gone)
     @property Visibility visibility() { return _visibility; }
     /// sets widget visibility (Visible, Invisible, Gone)
-    @property Widget visibility(Visibility visible) {
-        if (_visibility != visible) {
-            if ((_visibility == Visibility.Gone) || (visible == Visibility.Gone)) {
+    @property Widget visibility(Visibility newVisibility) {
+        if (_visibility != newVisibility) {
+            if ((_visibility == Visibility.Gone) || (newVisibility == Visibility.Gone)) {
                 if (parent)
                     parent.requestLayout();
                 else
                     requestLayout();
             } else
                 invalidate();
-            _visibility = visible;
+            _visibility = newVisibility;
         }
         return this;
     }
@@ -868,9 +875,9 @@ public:
             this.rect = widget.pos;
         }
         static if (BACKEND_GUI) {
-            static immutable int NEAR_THRESHOLD = 10;
+            static enum NEAR_THRESHOLD = 10;
         } else {
-            static immutable int NEAR_THRESHOLD = 1;
+            static enum NEAR_THRESHOLD = 1;
         }
         bool nearX(TabOrderInfo v) {
             return v.rect.left >= rect.left - NEAR_THRESHOLD  && v.rect.left <= rect.left + NEAR_THRESHOLD;
@@ -1516,9 +1523,9 @@ public:
     // Widget hierarhy methods
 
     /// returns number of children of this widget
-    @property int childCount() { return 0; }
+    @property int childCount() const { return 0; }
     /// returns child by index
-    Widget child(int index) { return null; }
+    inout(Widget) child(int index) inout { return null; }
     /// adds child, returns added item
     Widget addChild(Widget item) { assert(false, "addChild: children not suported for this widget type"); }
     /// adds child, returns added item
@@ -1732,9 +1739,9 @@ class WidgetGroup : Widget {
     protected WidgetList _children;
 
     /// returns number of children of this widget
-    @property override int childCount() { return _children.count; }
+    @property override int childCount() const { return _children.count; }
     /// returns child by index
-    override Widget child(int index) { return _children.get(index); }
+    override inout(Widget) child(int index) inout { return _children.get(index); }
     /// adds child, returns added item
     override Widget addChild(Widget item) { return _children.add(item).parent(this); }
     /// inserts child at given index, returns inserted item

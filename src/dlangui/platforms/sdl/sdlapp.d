@@ -249,6 +249,8 @@ class SDLWindow : Window {
             windowFlags |= SDL_WINDOW_RESIZABLE;
         if (flags & WindowFlag.Fullscreen)
             windowFlags |= SDL_WINDOW_FULLSCREEN;
+        if (flags & WindowFlag.Borderless)
+            windowFlags = SDL_WINDOW_BORDERLESS;
         windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
         static if (ENABLE_OPENGL) {
             if (_enableOpengl)
@@ -410,7 +412,19 @@ class SDLWindow : Window {
                 if (_windowState != WindowState.normal) {
                     SDL_RestoreWindow(_win);
                     version(linux) {
-                        // some SDL versions, reset windows size and position to values from create window (SDL 2.0.4) on linux (don't know how it works on macOS)
+                        // On linux with Cinnamon desktop, changing window state from for example minimized reset windows size
+                        // and/or position to values from create window (last tested on Cinamon 3.4.6 with SDL 2.0.4)
+                        //
+                        // Steps to reproduce:
+                        // Need app with two windows - dlangide for example.
+                        // 1. Comment this fix
+                        // 2. dub run --force
+                        // 3. After first window appear move it and/or change window size
+                        // 4. Click on button to open file
+                        // 5. Click on window icon minimize in open file dialog
+                        // 6. Restore window clicking on taskbar
+                        // 7. The first main window has old position/size
+                        // Xfce works OK without this fix
                         if (newWindowRect.bottom == int.min && newWindowRect.right == int.min)
                             SDL_SetWindowSize(_win, _windowRect.right, _windowRect.bottom);
 
@@ -476,7 +490,7 @@ class SDLWindow : Window {
 
     protected dstring _caption;
 
-    override @property dstring windowCaption() {
+    override @property dstring windowCaption() const {
         return _caption;
     }
 
@@ -1178,6 +1192,7 @@ class SDLPlatform : Platform {
 
     /// handle theme change: e.g. reload some themed resources
     override void onThemeChanged() {
+        super.onThemeChanged();
         if (currentTheme)
             currentTheme.onThemeChanged();
         foreach(w; _windowMap)

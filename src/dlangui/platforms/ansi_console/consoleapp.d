@@ -1,4 +1,4 @@
-module dlangui.platforms.console.consoleapp;
+module dlangui.platforms.ansi_console.consoleapp;
 
 public import dlangui.core.config;
 static if (BACKEND_CONSOLE):
@@ -9,8 +9,8 @@ import dlangui.graphics.drawbuf;
 import dlangui.graphics.fonts;
 import dlangui.widgets.styles;
 import dlangui.widgets.widget;
-import dlangui.platforms.console.consolefont;
-private import dlangui.platforms.console.dconsole;
+import dlangui.platforms.ansi_console.consolefont;
+private import dlangui.platforms.ansi_console.dconsole;
 
 class ConsoleWindow : Window {
     ConsolePlatform _platform;
@@ -37,7 +37,7 @@ class ConsoleWindow : Window {
     }
     private dstring _windowCaption;
     /// returns window caption
-    override @property dstring windowCaption() {
+    override @property dstring windowCaption() const {
         return _windowCaption;
     }
     /// sets window caption
@@ -84,7 +84,7 @@ class ConsolePlatform : Platform {
 
     @property Console console() { return _console; }
 
-    protected ConsoleDrawBuf _drawBuf;
+    protected ANSIConsoleDrawBuf _drawBuf;
     this() {
         _console = new Console();
         _console.batchMode = true;
@@ -95,9 +95,12 @@ class ConsolePlatform : Platform {
         _console.init();
         _console.setCursorType(ConsoleCursorType.Invisible);
         _uiDialogDisplayMode = DialogDisplayMode.allTypesOfDialogsInPopup;
-        _drawBuf = new ConsoleDrawBuf(_console);
+        _drawBuf = new ANSIConsoleDrawBuf(_console);
     }
     ~this() {
+        //Log.d("Destroying console");
+        //destroy(_console);
+        Log.d("Destroying drawbuf");
         destroy(_drawBuf);
     }
 
@@ -232,11 +235,18 @@ class ConsolePlatform : Platform {
     * When returned from this method, application is shutting down.
     */
     override int enterMessageLoop() {
+        Log.i("Entered message loop");
         while (_console.pollInput()) {
-            if (_windowList.length == 0)
+            if (_windowList.length == 0) {
+                Log.d("Window count is 0 - exiting message loop");
+
                 break;
+            }
         }
-        // TODO
+        Log.i("Message loop finished - closing windows");
+        _windowsToClose ~= _windowList;
+        checkClosedWindows();
+        Log.i("Exiting from message loop");
         return 0;
     }
     private dstring _clipboardText;
@@ -259,10 +269,17 @@ class ConsolePlatform : Platform {
     override void requestLayout() {
         // TODO
     }
+
+    private void onCtrlC() {
+        Log.w("Ctrl+C pressed - stopping application");
+        if (_console) {
+            _console.stop();
+        }
+    }
 }
 
 /// drawing buffer - image container which allows to perform some drawing operations
-class ConsoleDrawBuf : DrawBuf {
+class ANSIConsoleDrawBuf : ConsoleDrawBuf {
 
     protected Console _console;
     @property Console console() { return _console; }
@@ -406,6 +423,11 @@ class ConsoleDrawBuf : DrawBuf {
         }
     }
 
+    override void fillGradientRect(Rect rc, uint color1, uint color2, uint color3, uint color4) {
+        // TODO
+        fillRect(rc, color1);
+    }
+
     /// fill rectangle with solid color and pattern (clipping is applied) 0=solid fill, 1 = dotted
     override void fillRectPattern(Rect rc, uint color, int pattern) {
         // default implementation: does not support patterns
@@ -417,7 +439,7 @@ class ConsoleDrawBuf : DrawBuf {
         // TODO
     }
 
-    void drawChar(int x, int y, dchar ch, uint color, uint bgcolor) {
+    override void drawChar(int x, int y, dchar ch, uint color, uint bgcolor) {
         if (x < _clipRect.left || x >= _clipRect.right || y < _clipRect.top || y >= _clipRect.bottom)
             return;
         ubyte tc = toConsoleColor(color, false);
@@ -450,6 +472,15 @@ class ConsoleDrawBuf : DrawBuf {
     }
 }
 
+
+extern(C) void mySignalHandler(int value) {
+    Log.i("Signal handler - signal=", value);
+    ConsolePlatform platform = cast(ConsolePlatform)Platform.instance;
+    if (platform) {
+        platform.onCtrlC();
+    }
+}
+
 //version (none):
 // entry point for console app
 extern(C) int DLANGUImain(string[] args) {
@@ -462,6 +493,10 @@ extern(C) int DLANGUImain(string[] args) {
     version (Windows) {
         import core.sys.windows.winuser;
         DOUBLE_CLICK_THRESHOLD_MS = GetDoubleClickTime();
+    } else {
+        // set Ctrl+C handler
+        import core.sys.posix.signal;
+        sigset(SIGINT, &mySignalHandler);
     }
 
     currentTheme = createDefaultTheme();
@@ -469,12 +504,16 @@ extern(C) int DLANGUImain(string[] args) {
 
     Log.i("Entering UIAppMain: ", args);
     int result = -1;
-    try {
-        result = UIAppMain(args);
-        Log.i("UIAppMain returned ", result);
-    } catch (Exception e) {
-        Log.e("Abnormal UIAppMain termination");
-        Log.e("UIAppMain exception: ", e);
+    version (unittest) {
+        result = 0;
+    } else {
+        try {
+                result = UIAppMain(args);
+                Log.i("UIAppMain returned ", result);
+        } catch (Exception e) {
+            Log.e("Abnormal UIAppMain termination");
+            Log.e("UIAppMain exception: ", e);
+        }
     }
 
     Platform.setInstance(null);

@@ -50,11 +50,17 @@ struct Point {
     int x;
     int y;
 
-    Point opBinary(string op)(Point v) if (op == "+") {
+    Point opBinary(string op)(Point v) const if (op == "+") {
         return Point(x + v.x, y + v.y);
     }
-    Point opBinary(string op)(Point v) if (op == "-") {
+    Point opBinary(string op)(int n) const if (op == "*") {
+        return Point(x * n, y * n);
+    }
+    Point opBinary(string op)(Point v) const if (op == "-") {
         return Point(x - v.x, y - v.y);
+    }
+    Point opUnary(string op)() const if (op == "-") {
+        return Point(-x, -y);
     }
     int opCmp(ref const Point b) const {
         if (x == b.x) return y - b.y;
@@ -294,13 +300,31 @@ int fromPercentSize(int size, int baseSize) {
 
 /// screen dots per inch
 private __gshared int PRIVATE_SCREEN_DPI = 96;
+/// value to override detected system DPI, 0 to disable overriding
+private __gshared int PRIVATE_SCREEN_DPI_OVERRIDE = 0;
 
+/// get current screen DPI used for scaling while drawing
 @property int SCREEN_DPI() {
-    return PRIVATE_SCREEN_DPI;
+    return PRIVATE_SCREEN_DPI_OVERRIDE ? PRIVATE_SCREEN_DPI_OVERRIDE : PRIVATE_SCREEN_DPI;
 }
 
+/// get screen DPI detection override value, if non 0 - this value is used instead of DPI detected by platform, if 0, value detected by platform will be used)
+@property int overrideScreenDPI() {
+    return PRIVATE_SCREEN_DPI_OVERRIDE;
+}
+
+/// call to disable automatic screen DPI detection, use provided one instead (pass 0 to disable override and use value detected by platform)
+@property void overrideScreenDPI(int dpi = 96) {
+    static if (WIDGET_STYLE_CONSOLE) {
+    } else {
+        if ((dpi >= 72 && dpi <= 500) || dpi == 0)
+            PRIVATE_SCREEN_DPI_OVERRIDE = dpi;
+    }
+}
+
+/// set screen DPI detected by platform
 @property void SCREEN_DPI(int dpi) {
-    static if (BACKEND_CONSOLE) {
+    static if (WIDGET_STYLE_CONSOLE) {
         PRIVATE_SCREEN_DPI = dpi;
     } else {
         if (dpi >= 72 && dpi <= 500) {
@@ -310,6 +334,11 @@ private __gshared int PRIVATE_SCREEN_DPI = 96;
             }
         }
     }
+}
+
+/// returns DPI detected by platform w/o override
+@property int systemScreenDPI() {
+    return PRIVATE_SCREEN_DPI;
 }
 
 /// one point is 1/72 of inch
@@ -348,10 +377,16 @@ enum SubpixelRenderingMode : ubyte {
 align(1)
 struct Glyph
 {
+    static if (ENABLE_OPENGL) {
+        /// 0: unique id of glyph (for drawing in hardware accelerated scenes)
+        uint    id;
+    }
+
     /// 0: width of glyph black box
     ushort   blackBoxX;
 
-    @property ushort correctedBlackBoxX() { return subpixelMode ? blackBoxX / 3 : blackBoxX; }
+    @property ushort correctedBlackBoxX() { return subpixelMode ? (blackBoxX + 2) / 3 : blackBoxX; }
+
 
     /// 2: height of glyph black box
     ubyte   blackBoxY;
@@ -361,17 +396,15 @@ struct Glyph
     byte    originY;
 
     /// 5: full width of glyph
-    ubyte   width;
-    /// 6: subpixel rendering mode - if !=SubpixelRenderingMode.None, glyph data contains 3 bytes per pixel instead of 1
+    ubyte   widthPixels;
+    /// 6: full width of glyph scaled * 64
+    ushort   widthScaled;
+    /// 8: subpixel rendering mode - if !=SubpixelRenderingMode.None, glyph data contains 3 bytes per pixel instead of 1
     SubpixelRenderingMode subpixelMode;
-    /// 7: usage flag, to handle cleanup of unused glyphs
+    /// 9: usage flag, to handle cleanup of unused glyphs
     ubyte   lastUsage;
-    static if (ENABLE_OPENGL) {
-        /// 8: unique id of glyph (for drawing in hardware accelerated scenes)
-        uint    id;
-    }
 
-    ///< 12: glyph data, arbitrary size (blackBoxX * blackBoxY)
+    ///< 10: glyph data, arbitrary size (blackBoxX * blackBoxY)
     ubyte[] glyph;
 }
 
@@ -480,6 +513,55 @@ struct Ref(T) { // if (T is RefCountedObject)
 }
 
 
+/**
+    This struct allows to not execute some code if some variables was not changed since the last check.
+    Used for optimizations.
+
+    Reference types, arrays and pointers are compared by reference.
+ */
+struct CalcSaver(Params...) {
+    import std.typecons : Tuple;
+    Tuple!Params values;
+
+    bool check(Params args) {
+        bool changed;
+        foreach (i, arg; args) {
+            if (values[i] !is arg) {
+                values[i] = arg;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+}
+
+///
+unittest {
+
+    class A { }
+
+    CalcSaver!(uint, double[], A) saver;
+
+    uint x = 5;
+    double[] arr = [1, 2, 3];
+    A a = new A();
+
+    assert(saver.check(x, arr, a));
+    // values are not changing
+    assert(!saver.check(x, arr, a));
+    assert(!saver.check(x, arr, a));
+    assert(!saver.check(x, arr, a));
+    assert(!saver.check(x, arr, a));
+
+    x = 8;
+    arr ~= 25;
+    a = new A();
+    // values are changed
+    assert(saver.check(x, arr, a));
+    assert(!saver.check(x, arr, a));
+}
+
+
 //================================================================================
 // some utility functions
 
@@ -532,4 +614,105 @@ string toUTF8(dstring str) {
         buf.ptr[pos++] = ch;
     }
     return cast(string)buf;
+}
+
+/// normalize end of line style - convert to '\n'
+dstring normalizeEndOfLineCharacters(dstring s) {
+    bool crFound = false;
+    foreach(ch; s) {
+        if (ch == '\r') {
+            crFound = true;
+            break;
+        }
+    }
+    if (!crFound)
+        return s;
+    dchar[] res;
+    res.reserve(s.length);
+    dchar prevCh = 0;
+    foreach(ch; s) {
+        if (ch == '\r') {
+            res ~= '\n';
+        } else if (ch == '\n') {
+            if (prevCh != '\r')
+                res ~= '\n';
+        } else {
+            res ~= ch;
+        }
+        prevCh = ch;
+    }
+    return cast(dstring)res;
+}
+
+/// C malloc allocated array wrapper
+struct MallocBuf(T) {
+    import core.stdc.stdlib : realloc, free;
+    private T * _allocated;
+    private uint _allocatedSize;
+    private uint _length;
+    /// get pointer
+    @property T * ptr() { return _allocated; }
+    /// get length
+    @property uint length() { return _length; }
+    /// set new length
+    @property void length(uint len) {
+        if (len > _allocatedSize) {
+            reserve(_allocatedSize ? len * 2 : len);
+        }
+        _length = len;
+    }
+    /// const array[index];
+    T opIndex(uint index) const {
+        assert(index < _length);
+        return _allocated[index];
+    }
+    /// ref array[index];
+    ref T opIndex(uint index) {
+        assert(index < _length);
+        return _allocated[index];
+    }
+    /// array[index] = value;
+    void opIndexAssign(uint index, T value) {
+        assert(index < _length);
+        _allocated[index] = value;
+    }
+    /// array[index] = value;
+    void opIndexAssign(uint index, T[] values) {
+        assert(index + values.length < _length);
+        _allocated[index .. index + values.length] = values[];
+    }
+    /// array[a..b]
+    T[] opSlice(uint a, uint b) {
+        assert(a <= b && b <= _length);
+        return _allocated[a .. b];
+    }
+    /// array[]
+    T[] opSlice() {
+        return _allocated ? _allocated[0 .. _length] : null;
+    }
+    /// array[$]
+    uint opDollar() { return _length; }
+    ~this() {
+        clear();
+    }
+    /// free allocated memory, set length to 0
+    void clear() {
+        if (_allocated)
+            free(_allocated);
+        _allocatedSize = 0;
+        _length = 0;
+    }
+    /// make sure buffer capacity is at least (size) items
+    void reserve(uint size) {
+        if (_allocatedSize < size) {
+            _allocated = cast(T*)realloc(_allocated, T.sizeof * size);
+            _allocatedSize = size;
+        }
+    }
+    /// fill buffer with specified value
+    void fill(T value) {
+        if (_length) {
+            _allocated[0 .. _length] = value;
+        }
+    }
 }

@@ -10,6 +10,8 @@ version(USE_CONSOLE) {
     enum ENABLE_OPENGL = false;
     enum ENABLE_FREETYPE = false;
     enum BACKEND_CONSOLE = true;
+    /// Tweaking widgets to console style drawing
+    enum WIDGET_STYLE_CONSOLE = true;
     enum BACKEND_GUI = false;
     enum BACKEND_SDL = false;
     enum BACKEND_X11 = false;
@@ -17,9 +19,15 @@ version(USE_CONSOLE) {
     enum BACKEND_WIN32 = false;
     enum BACKEND_ANDROID = false;
 } else {
-    version(USE_EXTERNAL) {}
+    version(USE_EXTERNAL) {
+        // Use this file to define any enums that is need for the external backend
+        mixin(import("external_cfg.d"));
+    }
     else
+    {
         enum BACKEND_GUI = true;
+        enum WIDGET_STYLE_CONSOLE = false;
+    }
 
     version (NO_FREETYPE) {
         enum ENABLE_FREETYPE = false;
@@ -87,11 +95,11 @@ version(USE_CONSOLE) {
         enum BACKEND_CONSOLE = false;
     } else version (USE_DSFML) {
         // DSFML backend already selected using version identifier
-        version (USE_OPENGL) {
+        //version (USE_OPENGL) {
             enum ENABLE_OPENGL = true;
-        } else {
-            enum ENABLE_OPENGL = false;
-        }
+        //} else {
+        //    enum ENABLE_OPENGL = false;
+        //}
         enum BACKEND_SDL = false;
         enum BACKEND_X11 = false;
         enum BACKEND_DSFML = true;
@@ -100,17 +108,7 @@ version(USE_CONSOLE) {
         enum BACKEND_CONSOLE = false;
     } else version (USE_EXTERNAL) {
         // External backend already selected using version identifier
-        version (USE_OPENGL) {
-            enum ENABLE_OPENGL = true;
-        } else {
-            enum ENABLE_OPENGL = false;
-        }
-        enum BACKEND_GUI = false;
-        enum BACKEND_CONSOLE = false;
-        enum BACKEND_SDL = false;
-        enum BACKEND_X11 = false;
-        enum BACKEND_DSFML = false;
-        enum BACKEND_WIN32 = false;
+        // All config variables should be settled in external config file
     } else {
         // no backend selected: set default based on platform
         version (Windows) {

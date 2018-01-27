@@ -44,6 +44,7 @@ class InputBox : Dialog {
         _editor.contentChange = delegate(EditableContent content) {
             _text = content.text;
         };
+        _editor.setDefaultPopupMenu();
         addChild(msg);
         addChild(_editor);
         addChild(createButtonsPanel(_actions, _defaultButtonIndex, 0));
@@ -54,5 +55,19 @@ class InputBox : Dialog {
         super.onShow();
         _editor.selectAll();
         _editor.setFocus();
+    }
+
+    override dstring text() const {
+        return _text;
+    }
+
+    override Widget text(dstring t) {
+        _text = t;
+        return this;
+    }
+
+    override Widget text(UIString s) {
+        _text = s;
+        return this;
     }
 }

@@ -95,7 +95,7 @@ class TextWidget : Widget {
 
     protected UIString _text;
     /// get widget text
-    override @property dstring text() { return _text; }
+    override @property dstring text() const { return _text; }
     /// set text to show
     override @property Widget text(dstring s) { 
         _text = s; 
@@ -115,20 +115,33 @@ class TextWidget : Widget {
         return this;
     }
 
-    override void measure(int parentWidth, int parentHeight) { 
+    private CalcSaver!(Font, dstring, uint, uint, int) _measureSaver;
+
+    override void measure(int parentWidth, int parentHeight) {
         FontRef font = font();
-        //auto measureStart = std.datetime.Clock.currAppTick;
-        Point sz;
-        if (maxLines == 1) {
-            sz = font.textSize(text, MAX_WIDTH_UNSPECIFIED, 4, 0, textFlags);
-        } else {
-            sz = font.measureMultilineText(text,maxLines,parentWidth-margins.left-margins.right-padding.left-padding.right, 4, 0, textFlags);
+        
+        uint w;
+        if (maxLines == 1) 
+            w = MAX_WIDTH_UNSPECIFIED;
+        else {
+            w = parentWidth - margins.left - margins.right - padding.left - padding.right;
+            if (maxWidth > 0 && maxWidth < w)
+                w = maxWidth - padding.left - padding.right;
         }
-        //auto measureEnd = std.datetime.Clock.currAppTick;
-        //auto duration = measureEnd - measureStart;
-        //if (duration.length > 10)
-        //    Log.d("TextWidget measureText took ", duration.length, " ticks");
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        uint flags = textFlags;
+
+        // optimization: do not measure if nothing changed
+        if (_measureSaver.check(font.get, text, w, flags, maxLines) || _needLayout) {
+            Point sz;
+            if (maxLines == 1) {
+                sz = font.textSize(text, w, 4, 0, flags);
+            } else {
+                sz = font.measureMultilineText(text, maxLines, w, 4, 0, flags);
+            }
+            // it's not very correct, but in such simple widget it doesn't make issues
+            measuredContent(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED, sz.x, sz.y);
+            _needLayout = false;
+        }
     }
 
     override void onDraw(DrawBuf buf) {
@@ -349,14 +362,46 @@ class ImageTextButton : HorizontalLayout {
     protected TextWidget _label;
 
     /// Get label text
-    override @property dstring text() { return _label.text; }
+    override @property dstring text() const { return _label.text; }
     /// Set label plain unicode string
     override @property Widget text(dstring s) { _label.text = s; requestLayout(); return this; }
     /// Set label string resource Id
     override @property Widget text(UIString s) { _label.text = s; requestLayout(); return this; }
-    
+    /// get text color (ARGB 32 bit value)
+    override @property uint textColor() const { return _label.textColor; }
+    /// set text color for widget - from string like "#5599CC" or "white"
+    override @property Widget textColor(string colorString) { _label.textColor(colorString); return this; }
+    /// set text color (ARGB 32 bit value)
+    override @property Widget textColor(uint value) { _label.textColor(value); return this; }
+    /// get text flags (bit set of TextFlag enum values)
+    override @property uint textFlags() { return _label.textFlags(); }
+    /// set text flags (bit set of TextFlag enum values)
+    override @property Widget textFlags(uint value) { _label.textFlags(value); return this; }
+    /// returns font face
+    override @property string fontFace() const { return _label.fontFace(); }
+    /// set font face for widget - override one from style
+    override @property Widget fontFace(string face) { _label.fontFace(face); return this; }
+    /// returns font style (italic/normal)
+    override @property bool fontItalic() const { return _label.fontItalic; }
+    /// set font style (italic/normal) for widget - override one from style
+    override @property Widget fontItalic(bool italic) { _label.fontItalic(italic); return this; }
+    /// returns font weight
+    override @property ushort fontWeight() const { return _label.fontWeight; }
+    /// set font weight for widget - override one from style
+    override @property Widget fontWeight(int weight) { _label.fontWeight(weight); return this; }
+    /// returns font size in pixels
+    override @property int fontSize() const { return _label.fontSize; }
+    /// Set label font size 
+    override @property Widget fontSize(int size) { _label.fontSize(size); return this; }
+    /// returns font family
+    override @property FontFamily fontFamily() const { return _label.fontFamily; }
+    /// set font family for widget - override one from style
+    override @property Widget fontFamily(FontFamily family) { _label.fontFamily(family); return this; }
+    /// returns font set for widget using style or set manually
+    override @property FontRef font() const { return _label.font; }
+
     /// Returns orientation: Vertical - image top, Horizontal - image left"
-    override @property Orientation orientation() {
+    override @property Orientation orientation() const {
         return super.orientation();
     }
 
@@ -523,7 +568,7 @@ class RadioButton : ImageTextButton {
 /// Text only button
 class Button : Widget {
     protected UIString _text;
-    override @property dstring text() { return _text; }
+    override @property dstring text() const { return _text; }
     override @property Widget text(dstring s) { _text = s; requestLayout(); return this; }
     override @property Widget text(UIString s) { _text = s; requestLayout(); return this; }
     @property Widget textResource(string s) { _text = s; requestLayout(); return this; }

@@ -288,6 +288,8 @@ class DrawBuf : RefCountedObject {
     abstract void fill(uint color);
     /// fill rectangle with solid color (clipping is applied)
     abstract void fillRect(Rect rc, uint color);
+    /// fill rectangle with a gradient (clipping is applied)
+    abstract void fillGradientRect(Rect rc, uint color1, uint color2, uint color3, uint color4);
     /// fill rectangle with solid color and pattern (clipping is applied) 0=solid fill, 1 = dotted
     void fillRectPattern(Rect rc, uint color, int pattern) {
         // default implementation: does not support patterns
@@ -856,20 +858,26 @@ class DrawBuf : RefCountedObject {
 
 alias DrawBufRef = Ref!DrawBuf;
 
-/// RAII setting/restoring of clip rectangle
+/// RAII setting/restoring of a DrawBuf clip rectangle
 struct ClipRectSaver {
     private DrawBuf _buf;
     private Rect _oldClipRect;
     private uint _oldAlpha;
-    /// apply (intersect) new clip rectangle and alpha to draw buf; restore
-    this(DrawBuf buf, ref Rect newClipRect, uint newAlpha = 0) {
+
+    /// apply (intersect) new clip rectangle and alpha to draw buf
+    /// set `intersect` parameter to `false`, if you want to draw something outside of the widget
+    this(DrawBuf buf, ref Rect newClipRect, uint newAlpha = 0, bool intersect = true) {
         _buf = buf;
         _oldClipRect = buf.clipRect;
         _oldAlpha = buf.alpha;
-        buf.intersectClipRect(newClipRect);
+        if (intersect)
+            buf.intersectClipRect(newClipRect);
+        else
+            buf.clipRect = newClipRect;
         if (newAlpha)
             buf.addAlpha(newAlpha);
     }
+    /// restore previous clip rectangle
     ~this() {
         _buf.clipRect = _oldClipRect;
         _buf.alpha = _oldAlpha;
@@ -1161,6 +1169,25 @@ class ColorDrawBufBase : DrawBuf {
         }
     }
 
+    /// fill rectangle with a gradient (clipping is applied)
+    override void fillGradientRect(Rect rc, uint color1, uint color2, uint color3, uint color4) {
+        if (applyClipping(rc)) {
+            foreach (y; rc.top .. rc.bottom) {
+                // interpolate vertically at the side edges
+                uint ay = (255 * (y - rc.top)) / (rc.bottom - rc.top);
+                uint cl = blendARGB(color2, color1, ay);
+                uint cr = blendARGB(color4, color3, ay);
+
+                uint * row = scanLine(y);
+                foreach (x; rc.left .. rc.right) {
+                    // interpolate horizontally
+                    uint ax = (255 * (x - rc.left)) / (rc.right - rc.left);
+                    row[x] = blendARGB(cr, cl, ax);
+                }
+            }
+        }
+    }
+
     /// fill rectangle with solid color and pattern (clipping is applied) 0=solid fill, 1 = dotted
     override void fillRectPattern(Rect rc, uint color, int pattern) {
         uint alpha = color >> 24;
@@ -1203,18 +1230,18 @@ class ColorDrawBufBase : DrawBuf {
             row[x] = blendARGB(row[x], color, alpha);
         }
     }
-
 }
 
 class GrayDrawBuf : DrawBuf {
-    int _dx;
-    int _dy;
+    protected int _dx;
+    protected int _dy;
     /// returns buffer bits per pixel
     override @property int bpp() { return 8; }
     @property override int width() { return _dx; }
     @property override int height() { return _dy; }
 
-    ubyte[] _buf;
+    protected MallocBuf!ubyte _buf;
+
     this(int width, int height) {
         resize(width, height);
     }
@@ -1406,6 +1433,29 @@ class GrayDrawBuf : DrawBuf {
         }
     }
 
+    /// fill rectangle with a gradient (clipping is applied)
+    override void fillGradientRect(Rect rc, uint color1, uint color2, uint color3, uint color4) {
+        if (applyClipping(rc)) {
+            ubyte c1 = rgbToGray(color1);
+            ubyte c2 = rgbToGray(color2);
+            ubyte c3 = rgbToGray(color3);
+            ubyte c4 = rgbToGray(color4);
+            foreach (y; rc.top .. rc.bottom) {
+                // interpolate vertically at the side edges
+                uint ay = (255 * (y - rc.top)) / (rc.bottom - rc.top);
+                ubyte cl = blendGray(c2, c1, ay);
+                ubyte cr = blendGray(c4, c3, ay);
+
+                ubyte * row = scanLine(y);
+                foreach (x; rc.left .. rc.right) {
+                    // interpolate horizontally
+                    uint ax = (255 * (x - rc.left)) / (rc.right - rc.left);
+                    row[x] = blendGray(cr, cl, ax);
+                }
+            }
+        }
+    }
+
     /// draw pixel at (x, y) with specified color
     override void drawPixel(int x, int y, uint color) {
         if (!_clipRect.isPointInside(x, y))
@@ -1424,7 +1474,8 @@ class GrayDrawBuf : DrawBuf {
 }
 
 class ColorDrawBuf : ColorDrawBufBase {
-    uint[] _buf;
+    protected MallocBuf!uint _buf;
+
     /// create ARGB8888 draw buf of specified width and height
     this(int width, int height) {
         resize(width, height);
@@ -1432,9 +1483,8 @@ class ColorDrawBuf : ColorDrawBufBase {
     /// create copy of ColorDrawBuf
     this(ColorDrawBuf v) {
         this(v.width, v.height);
-        //_buf.length = v._buf.length;
-        foreach(i; 0 .. _buf.length)
-            _buf[i] = v._buf[i];
+        if (auto len = _buf.length)
+            _buf.ptr[0 .. len] = v._buf.ptr[0 .. len];
     }
     /// create resized copy of ColorDrawBuf
     this(ColorDrawBuf v, int dx, int dy) {
@@ -1444,7 +1494,7 @@ class ColorDrawBuf : ColorDrawBufBase {
     }
 
     void invertAndPreMultiplyAlpha() {
-        foreach(ref pixel; _buf) {
+        foreach(ref pixel; _buf[]) {
             uint a = (pixel >> 24) & 0xFF;
             uint r = (pixel >> 16) & 0xFF;
             uint g = (pixel >> 8) & 0xFF;
@@ -1460,12 +1510,12 @@ class ColorDrawBuf : ColorDrawBufBase {
     }
 
     void invertAlpha() {
-        foreach(ref pixel; _buf)
+        foreach(ref pixel; _buf[])
             pixel ^= 0xFF000000;
     }
 
     void invertByteOrder() {
-        foreach(ref pixel; _buf) {
+        foreach(ref pixel; _buf[]) {
             pixel = (pixel & 0xFF00FF00) |
                 ((pixel & 0xFF0000) >> 16) |
                 ((pixel & 0xFF) << 16);
@@ -1474,18 +1524,20 @@ class ColorDrawBuf : ColorDrawBufBase {
 
     // for passing of image to OpenGL texture
     void invertAlphaAndByteOrder() {
-        foreach(ref pixel; _buf) {
+        foreach(ref pixel; _buf[]) {
             pixel = ((pixel & 0xFF00FF00) |
                 ((pixel & 0xFF0000) >> 16) |
                 ((pixel & 0xFF) << 16));
             pixel ^= 0xFF000000;
         }
     }
+
     override uint * scanLine(int y) {
         if (y >= 0 && y < _dy)
             return _buf.ptr + _dx * y;
         return null;
     }
+
     override void resize(int width, int height) {
         if (_dx == width && _dy == height)
             return;
@@ -1494,6 +1546,7 @@ class ColorDrawBuf : ColorDrawBufBase {
         _buf.length = _dx * _dy;
         resetClipping();
     }
+
     override void fill(uint color) {
         if (hasClipping) {
             fillRect(_clipRect, color);
@@ -1504,6 +1557,7 @@ class ColorDrawBuf : ColorDrawBufBase {
         foreach(i; 0 .. len)
             p[i] = color;
     }
+
     override DrawBuf transformColors(ref ColorTransform transform) {
         if (transform.empty)
             return this;
@@ -1527,6 +1581,71 @@ class ColorDrawBuf : ColorDrawBufBase {
             }
         }
         return res;
+    }
+
+    /// Apply Gaussian blur on the image
+    void blur(uint blurSize) {
+        if (blurSize == 0)
+            return; // trivial case
+
+        // utility functions to get and set color
+        float[4] get(uint[] buf, uint x, uint y) {
+            uint c = buf[x + y * _dx];
+            float a = 255 - (c >> 24);
+            float r = (c >> 16) & 0xFF;
+            float g = (c >>  8) & 0xFF;
+            float b = (c >>  0) & 0xFF;
+            return [r, g, b, a];
+        }
+        void set(uint[] buf, uint x, uint y, float[4] c) {
+            buf[x + y * _dx] = makeRGBA(c[0], c[1], c[2], 255 - c[3]);
+        }
+
+
+        import std.algorithm : max, min;
+        import std.math;
+
+        // Gaussian function
+        float weight(in float x, in float sigma) pure nothrow {
+            enum inv_sqrt_2pi = 1 / sqrt(2 * PI);
+            return exp(- x ^^ 2 / (2 * sigma ^^ 2)) * inv_sqrt_2pi / sigma;
+        }
+
+        void blurOneDimension(uint[] bufIn, uint[] bufOut, uint blurSize, bool horizontally) {
+
+            float sigma = blurSize > 2 ? blurSize / 3.0 : blurSize / 2.0;
+
+            foreach (x; 0 .. _dx) {
+                foreach (y; 0 .. _dy) {
+                    float[4] c;
+                    c[] = 0;
+
+                    float sum = 0;
+                    foreach (int i; 1 .. blurSize + 1) {
+                        float[4] c1 = get(bufIn, 
+                            horizontally ? min(x + i, _dx - 1) : x, 
+                            horizontally ? y : min(y + i, _dy - 1)
+                        );
+                        float[4] c2 = get(bufIn, 
+                            horizontally ? max(x - i, 0) : x, 
+                            horizontally ? y : max(y - i, 0)
+                        );
+                        float w = weight(i, sigma);
+                        c[] += (c1[] + c2[]) * w;
+                        sum += 2 * w;
+                    }
+                    c[] += get(bufIn, x, y)[] * (1 - sum);
+                    set(bufOut, x, y, c);
+                }
+            }
+        }
+        // intermediate buffer for image
+        uint[] tmpbuf;
+        tmpbuf.length = _buf.length;
+        // do horizontal blur
+        blurOneDimension(_buf[], tmpbuf, blurSize, true);
+        // then do vertical blur
+        blurOneDimension(tmpbuf, _buf[], blurSize, false);
     }
 }
 

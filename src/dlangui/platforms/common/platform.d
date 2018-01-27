@@ -28,6 +28,7 @@ import dlangui.widgets.scrollbar;
 import dlangui.graphics.drawbuf;
 import dlangui.core.stdaction;
 import dlangui.core.asyncsocket;
+import dlangui.graphics.iconprovider;
 
 static if (ENABLE_OPENGL) {
     private import dlangui.graphics.gldrawbuf;
@@ -54,6 +55,10 @@ enum WindowFlag : uint {
     Modal = 4,
     /// measure window size on window.show() - helps if you want scrollWindow but on show() you want to set window to mainWidget measured size
     MeasureSize = 8,
+    /// window without decorations
+    Borderless = 16,
+    /// expand window size if main widget minimal size is greater than size defined in window constructor
+    ExpandSize = 32,
 }
 
 /// Window states
@@ -258,7 +263,7 @@ class Window : CustomEventTarget {
     @property int width() const { return _dx; }
     @property int height() const { return _dy; }
     @property uint keyboardModifiers() const { return _keyboardModifiers; }
-    @property Widget mainWidget() { return _mainWidget; }
+    @property inout(Widget) mainWidget() inout { return _mainWidget; }
     @property void mainWidget(Widget widget) {
         if (_mainWidget !is null) {
             _mainWidget.window = null;
@@ -361,7 +366,7 @@ class Window : CustomEventTarget {
     /// show window
     abstract void show();
     /// returns window caption
-    abstract @property dstring windowCaption();
+    abstract @property dstring windowCaption() const;
     /// sets window caption
     abstract @property void windowCaption(dstring caption);
     /// sets window icon
@@ -371,7 +376,9 @@ class Window : CustomEventTarget {
     /// close window
     abstract void close();
     /// returns parent window
-    abstract @property Window parentWindow();
+    @property Window parentWindow() {
+        return null;
+    }
 
     protected WindowState _windowState = WindowState.normal;
     /// returns current window state
@@ -462,8 +469,8 @@ class Window : CustomEventTarget {
     void adjustWindowOrContentSize(int minContentWidth, int minContentHeight) {
         _minContentWidth = minContentWidth;
         _minContentHeight = minContentHeight;
-        if (_windowOrContentResizeMode == WindowOrContentResizeMode.resizeWindow)
-            resizeWindow(Point(minContentWidth, minContentHeight));
+        if (_windowOrContentResizeMode == WindowOrContentResizeMode.resizeWindow || flags & WindowFlag.ExpandSize)
+            resizeWindow(Point(max(_windowRect.right, minContentWidth), max(_windowRect.bottom, minContentHeight)));
         updateWindowOrContentSize();
     }
 
@@ -1025,7 +1032,9 @@ class Window : CustomEventTarget {
         return _focusedWidget;
     }
 
-    abstract @property bool isActive();
+    @property bool isActive() {
+        return true;
+    }
 
     /// window state change signal
     Signal!OnWindowActivityHandler windowActivityChanged;
@@ -1937,6 +1946,11 @@ class Platform {
     /// handle theme change: e.g. reload some themed resources
     void onThemeChanged() {
         // override and call dispatchThemeChange for all windows
+        drawableCache.clear();
+        static if (!WIDGET_STYLE_CONSOLE) {
+            imageCache.checkpoint();
+            imageCache.cleanup();
+        }
     }
 
     /// default icon for new created windows
@@ -1952,7 +1966,32 @@ class Platform {
         return _defaultWindowIcon;
     }
 
+    private IconProviderBase _iconProvider;
+    @property IconProviderBase iconProvider() {
+        if (_iconProvider is null) {
+            try {
+                _iconProvider = new NativeIconProvider();
+            } catch(Exception e) {
+                Log.e("Error while creating icon provider.", e);
+                Log.d("Could not create native icon provider, fallbacking to the dummy one");
+                _iconProvider = new DummyIconProvider();
+            }
+        }
+        return _iconProvider;
+    }
 
+    @property IconProviderBase iconProvider(IconProviderBase provider)
+    {
+        _iconProvider = provider;
+        return _iconProvider;
+    }
+
+    ~this()
+    {
+        if(_iconProvider) {
+            destroy(_iconProvider);
+        }
+    }
 }
 
 /// get current platform object instance
@@ -1987,6 +2026,8 @@ static if (BACKEND_CONSOLE) {
         // to remove import
         extern(Windows) int DLANGUIWinMain(void* hInstance, void* hPrevInstance,
                                            char* lpCmdLine, int nCmdShow);
+        extern(Windows)
+            int DLANGUIWinMainProfile(string[] args);
     } else {
         // to remove import
         extern(C) int DLANGUImain(string[] args);
@@ -2006,16 +2047,23 @@ mixin template APP_ENTRY_POINT() {
         } else {
             /// workaround for link issue when WinMain is located in library
             version(Windows) {
-                extern (Windows) int WinMain(void* hInstance, void* hPrevInstance,
-                                                char* lpCmdLine, int nCmdShow)
-                {
-                    try {
-                        int res = DLANGUIWinMain(hInstance, hPrevInstance,
-                                                    lpCmdLine, nCmdShow);
-                        return res;
-                    } catch (Exception e) {
-                        Log.e("Exception: ", e);
-                        return 1;
+                version (ENABLE_PROFILING) {
+                    int main(string[] args)
+                    {
+                        return DLANGUIWinMainProfile(args);
+                    }
+                } else {
+                    extern (Windows) int WinMain(void* hInstance, void* hPrevInstance,
+                                                    char* lpCmdLine, int nCmdShow)
+                    {
+                        try {
+                            int res = DLANGUIWinMain(hInstance, hPrevInstance,
+                                                        lpCmdLine, nCmdShow);
+                            return res;
+                        } catch (Exception e) {
+                            Log.e("Exception: ", e);
+                            return 1;
+                        }
                     }
                 }
             } else {
