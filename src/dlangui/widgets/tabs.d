@@ -474,6 +474,35 @@ class TabControl : WidgetGroupDefaultDrawing {
         return this;
     }
 
+    /// remove tab
+    TabControl removeTab(int index) {
+        string nextId;
+        if (index == _items.indexById(_selectedTabId)) {
+            // current tab is being closed: remember next tab id
+            int nextIndex = getNextItemIndex(1);
+            if (nextIndex < 0)
+                nextIndex = getNextItemIndex(-1);
+            if (nextIndex >= 0)
+                nextId = _items[nextIndex].id;
+        }
+        if (index >= 0) {
+            Widget w = _children.remove(index + 1);
+            if (w)
+                destroy(w);
+            _items.remove(index);
+            if (index == _items.indexById(_selectedTabId))
+                _selectedTabId = null;
+            requestLayout();
+        }
+        if (nextId) {
+            index = _items.indexById(nextId);
+            if (index >= 0) {
+                selectTab(index, true);
+            }
+        }
+        return this;
+    }
+
     /// change name of tab
     void renameTab(string ID, dstring name) {
         int index = _items.indexById(id);
@@ -814,6 +843,17 @@ class TabHost : FrameLayout, TabHandler {
         return this;
     }
 
+    TabHost removeTab(int index) {
+        assert(_tabControl !is null, "No TabControl set for TabHost");
+        Widget child = removeChild(index);
+        if (child !is null) {
+            destroy(child);
+        }
+        _tabControl.removeTab(index);
+        requestLayout();
+        return this;
+    }
+
     /// add new tab by id and label string
     TabHost addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
         assert(_tabControl !is null, "No TabControl set for TabHost");
@@ -942,6 +982,13 @@ class TabWidget : VerticalLayout, TabHandler, TabCloseHandler {
     /// remove tab by id
     TabWidget removeTab(string id) {
         _tabHost.removeTab(id);
+        requestLayout();
+        return this;
+    }
+
+    /// remove tab by index
+    TabWidget removeTab(int index) {
+        _tabHost.removeTab(index);
         requestLayout();
         return this;
     }
