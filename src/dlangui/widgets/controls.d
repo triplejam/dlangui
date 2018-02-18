@@ -488,12 +488,15 @@ class LinkButton : ImageTextButton {
 class CheckBox : ImageTextButton {
     this(string ID = null, string textResourceId = null) {
         super(ID, "btn_check", textResourceId);
+        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, dstring labelText) {
         super(ID, "btn_check", labelText);
+        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, UIString label) {
         super(ID, "btn_check", label);
+        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     override protected void initialize(string drawableId, UIString caption) {
         super.initialize(drawableId, caption);
