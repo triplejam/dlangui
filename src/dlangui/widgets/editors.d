@@ -2269,12 +2269,19 @@ interface EnterKeyHandler {
     bool onEnterKey(EditWidgetBase editor);
 }
 
+interface EscKeyHandler {
+    bool onEscKey(EditWidgetBase editor);
+}
+
+
 /// single line editor
 class EditLine : EditWidgetBase {
 
     Signal!EditorActionHandler editorAction;
     /// handle Enter key press inside line editor
     Signal!EnterKeyHandler enterKey;
+
+    Signal!EscKeyHandler escKey;
 
     /// empty parameter list constructor - for usage by factory
     this() {
@@ -2452,6 +2459,16 @@ class EditLine : EditWidgetBase {
                     return true;
                 if (event.action == KeyAction.KeyUp) {
                     if (enterKey(this))
+                       return true;
+                }
+            }
+        }
+        if (escKey.assigned) {
+            if (event.keyCode == KeyCode.ESCAPE && event.modifiers == 0) {
+                if (event.action == KeyAction.KeyDown)
+                    return true;
+                if (event.action == KeyAction.KeyUp) {
+                    if (escKey(this))
                        return true;
                 }
             }
