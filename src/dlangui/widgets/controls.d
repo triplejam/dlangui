@@ -131,6 +131,11 @@ class TextWidget : Widget {
         return true;
     }
 
+    /// set to true if change widget width makes new widget heights
+    override bool heightDependOnWidth() {
+        return (maxLines != 1);
+    }
+
     private int _widthForContentSize = 70; // tutaj trzeba dodać minimalny tekst i sprawdzenie jeżeli tekst jest krótszy niż minimalny to zezwolić ewentualnie musi być minimalnie jak 
 
     private @property int widthForContentSize() {
@@ -169,12 +174,12 @@ class TextWidget : Widget {
         _measuredContentWidth = sz.x;
         _measuredContentHeight = sz.y;
 
-        Log.d("MTekst content size: ", sz);
+        ////Log.d("MText content size: ", sz);
         _needMeasureContent = false;
     }
 
     override void measureSize(int parentWidth, int parentHeight) {
-        Log.d("MTekst parent width: ", parentWidth);
+        ////Log.d("MText parent width: ", parentWidth);
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -186,7 +191,7 @@ class TextWidget : Widget {
         widthForContentSize = pwidth;
         measureMinSize();
         adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
-        Log.d("MTekst content size: ", measuredMinWidth, " ", measuredMinHeight);
+        ////Log.d("MText content size: ", measuredMinWidth, " ", measuredMinHeight);
     }
 
     override void onDraw(DrawBuf buf) {
