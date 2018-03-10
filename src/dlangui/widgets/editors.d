@@ -2415,15 +2415,20 @@ class EditLine : EditWidgetBase {
         return _measuredTextToSetWidgetSize;
     }
 
-    /// measure
-    override void measure(int parentWidth, int parentHeight) {
+    /// measure min size
+    override void measureMinSize() {
+        Point sz = measureTextToSetWidgetSize();
+        adjustMeasuredMinSize(sz.x, sz.y);
+    }
+    
+    /// measure size
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone)
             return;
 
         updateFontProps();
         measureVisibleText();
-        measureTextToSetWidgetSize();
-        measuredContent(parentWidth, parentHeight, _measuredTextToSetWidgetSize.x + _leftPaneWidth, _measuredTextToSetWidgetSize.y);
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredTextToSetWidgetSize.x + _leftPaneWidth, _measuredTextToSetWidgetSize.y);
     }
 
     override bool handleAction(const Action a) {
@@ -2643,7 +2648,7 @@ class EditBox : EditWidgetBase {
         Rect contentRc = rc;
         int findPanelHeight;
         if (_findPanel && _findPanel.visibility != Visibility.Gone) {
-            _findPanel.measure(rc.width, rc.height);
+            _findPanel.measureSize(rc.width, rc.height);
             findPanelHeight = _findPanel.measuredHeight;
             _findPanel.layout(Rect(rc.left, rc.bottom - findPanelHeight, rc.right, rc.bottom));
             contentRc.bottom -= findPanelHeight;
@@ -3260,18 +3265,19 @@ class EditBox : EditWidgetBase {
         return textSz;
     }
 
-    // override to set minimum scrollwidget size - default 100x100
-    override protected Point minimumVisibleContentSize() {
+    override void measureMinSize() {
         FontRef font = font();
         _measuredTextToSetWidgetSizeWidths.length = _textToSetWidgetSize.length;
         int charsMeasured = font.measureText(_textToSetWidgetSize, _measuredTextToSetWidgetSizeWidths, MAX_WIDTH_UNSPECIFIED, tabSize);
         _measuredTextToSetWidgetSize.x = charsMeasured > 0 ? _measuredTextToSetWidgetSizeWidths[charsMeasured - 1]: 0;
         _measuredTextToSetWidgetSize.y = font.height;
-        return _measuredTextToSetWidgetSize;
+        
+        Point sz = _measuredTextToSetWidgetSize;
+        adjustMeasuredMinSize(sz.x, sz.y);
     }
 
     /// measure
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone)
             return;
 
@@ -3279,13 +3285,13 @@ class EditBox : EditWidgetBase {
         updateMaxLineWidth();
         int findPanelHeight;
         if (_findPanel) {
-            _findPanel.measure(parentWidth, parentHeight);
+            _findPanel.measureSize(parentWidth, parentHeight);
             findPanelHeight = _findPanel.measuredHeight;
             if (parentHeight != SIZE_UNSPECIFIED)
                 parentHeight -= findPanelHeight;
         }
 
-        super.measure(parentWidth, parentHeight);
+        super.measureSize(parentWidth, parentHeight);
     }
 
 
