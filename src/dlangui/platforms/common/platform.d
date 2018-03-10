@@ -344,8 +344,8 @@ class Window : CustomEventTarget {
     @property void windowOrContentResizeMode(WindowOrContentResizeMode newMode) {
         _windowOrContentResizeMode = newMode;
         if (_mainWidget) {
-            _mainWidget.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
+            _mainWidget.measureMinSize();
+            adjustWindowOrContentSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
         }
     }
 
@@ -513,7 +513,7 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
-                    _hScrollBar.measure(_windowRect.right, _windowRect.bottom);
+                    _hScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
                     if (windowRect().bottom < _minContentHeight)
                         _hScrollBar.setRange(0, _minContentWidth + _hScrollBar.measuredHeight);
                     else
@@ -553,7 +553,7 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
-                    _vScrollBar.measure(_windowRect.right, _windowRect.bottom);
+                    _vScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
                     if (_hScrollBar)
                         _vScrollBar.setRange(0, _minContentHeight+_hScrollBar.measuredHeight);
                     else
@@ -592,18 +592,19 @@ class Window : CustomEventTarget {
     }
     void measure() {
         if (_hScrollBar)
-            _hScrollBar.measure(_dx, _dy);
+            _hScrollBar.measureSize(_dx, _dy);
 
         if (_vScrollBar)
-            _vScrollBar.measure(_dx, _dy);
+            _vScrollBar.measureSize(_dx, _dy);
 
         if (_mainWidget !is null) {
-            _mainWidget.measure(_currentContentWidth, _currentContentHeight);
+            //_mainWidget.measureMinSize();
+            _mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
         foreach(p; _popups)
-            p.measure(_currentContentWidth, _currentContentHeight);
+            p.measureSize(_currentContentWidth, _currentContentHeight);
         if (_tooltip.popup)
-            _tooltip.popup.measure(_currentContentWidth, _currentContentHeight);
+            _tooltip.popup.measureSize(_currentContentWidth, _currentContentHeight);
     }
     void layout() {
         if (_hScrollBar)
