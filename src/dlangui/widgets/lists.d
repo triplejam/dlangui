@@ -960,24 +960,33 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
             if (w is null || w.visibility == Visibility.Gone)
                 continue;
 
-            w.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
+            w.measureMinSize();
             if (_orientation == Orientation.Vertical) {
                 // Vertical
-                if (sz.x < w.measuredWidth)
-                    sz.x = w.measuredWidth;
-                sz.y += w.measuredHeight;
+                if (sz.x < w.measuredMinWidth)
+                    sz.x = w.measuredMinWidth;
+                sz.y += w.measuredMinHeight;
             } else {
                 // Horizontal
-                if (sz.y < w.measuredHeight)
-                    sz.y = w.measuredHeight;
-                sz.x += w.measuredWidth;
+                if (sz.y < w.measuredMinHeight)
+                    sz.y = w.measuredMinHeight;
+                sz.x += w.measuredMinWidth;
             }
         }
         return sz;
     }
 
+    override void measureMinSize() {
+        if (_orientation == Orientation.Vertical) {
+            adjustMeasuredMinSize(measureMinChildrenSize().x, 100);
+        }
+        else {
+            adjustMeasuredMinSize(100, measureMinChildrenSize().y);
+        }
+    }
+
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone) {
             _measuredWidth = _measuredHeight = 0;
             return;
@@ -986,14 +995,6 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
             _itemSizes.length = itemCount;
         Rect m = margins;
         Rect p = padding;
-
-        // set widget area to small when first measure
-        if (parentWidth == SIZE_UNSPECIFIED && parentHeight == SIZE_UNSPECIFIED)
-        {
-            Point sz = minimumVisibleContentSize;
-            measuredContent(parentWidth, parentHeight, sz.x, sz.y);
-            return;
-        }
 
         // calc size constraints for children
         int pwidth = parentWidth;
@@ -1007,7 +1008,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         Visibility oldScrollbarVisibility = _scrollbar.visibility;
 
         _scrollbar.visibility = Visibility.Visible;
-        _scrollbar.measure(pwidth, pheight);
+        _scrollbar.measureSize(pwidth, pheight);
 
         _lastMeasureWidth = pwidth;
         _lastMeasureHeight = pheight;
@@ -1022,7 +1023,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 _itemSizes[i].x = _itemSizes[i].y = 0;
                 continue;
             }
-            w.measure(pwidth, pheight);
+            w.measureSize(pwidth, pheight);
             _itemSizes[i].x = w.measuredWidth;
             _itemSizes[i].y = w.measuredHeight;
             if (_orientation == Orientation.Vertical) {
@@ -1064,7 +1065,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 Widget w = itemWidget(i);
                 if (w is null || w.visibility == Visibility.Gone)
                     continue;
-                w.measure(pwidth, pheight);
+                w.measureSize(pwidth, pheight);
                 _itemSizes[i].x = w.measuredWidth;
                 _itemSizes[i].y = w.measuredHeight;
                 if (_orientation == Orientation.Vertical) {
@@ -1074,14 +1075,14 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                     sz.y += w.measuredHeight;
                 } else {
                     // Horizontal
-                    w.measure(pwidth, pheight);
+                    //w.measure(pwidth, pheight); - think this is not necessary
                     if (sz.y < w.measuredHeight)
                         sz.y = w.measuredHeight;
                     sz.x += w.measuredWidth;
                 }
             }
         }
-        measuredContent(parentWidth, parentHeight, sz.x + _sbsz.x, sz.y + _sbsz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x + _sbsz.x, sz.y + _sbsz.y);
 
         if (_scrollbar.visibility == oldScrollbarVisibility) {
             _needLayout = oldNeedLayout;
@@ -1170,7 +1171,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
 
         // measure again if client size has been changed
         if (_lastMeasureWidth != rc.width || _lastMeasureHeight != rc.height)
-            measure(parentrc.width, parentrc.height);
+            measureSize(parentrc.width, parentrc.height);
 
         // hide scrollbar or update rc for scrollbar
         Rect sbrect = rc;
