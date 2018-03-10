@@ -221,14 +221,14 @@ class LayoutItems {
                 
                 if (_orientation == Orientation.Horizontal)
                     if (item.fillParent)
-                        item.measureSize(item.measuredMinSize + extraSpaceStep * item.weight, item.secondaryMinSize);
+                        item.measureSize(item.measuredMinSize + extraSpaceStep * item.weight, parentHeight > _maxSecondaryMinSize ? parentHeight : _maxSecondaryMinSize);
                     else
-                        item.measureSize(item.measuredMinSize, item.secondaryMinSize);
+                        item.measureSize(item.measuredMinSize, parentHeight > _maxSecondaryMinSize ? parentHeight : _maxSecondaryMinSize);
                 else
                     if (item.fillParent)
-                        item.measureSize(item.secondaryMinSize, item.measuredMinSize + extraSpaceStep * item.weight);
+                        item.measureSize(parentWidth > _maxSecondaryMinSize ? parentWidth : _maxSecondaryMinSize, item.measuredMinSize + extraSpaceStep * item.weight);
                     else
-                        item.measureSize(item.secondaryMinSize, item.measuredMinSize);
+                        item.measureSize(parentWidth > _maxSecondaryMinSize ? parentWidth : _maxSecondaryMinSize, item.measuredMinSize);
 
                 if (isPercentSize(item._layoutSize)) {
                     if (!hasPercentSizeWidget) {
