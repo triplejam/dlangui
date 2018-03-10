@@ -76,22 +76,29 @@ class TextWidget : Widget {
         super(ID);
         styleId = STYLE_TEXT;
         _text.id = textResourceId;
+        requestMeasureContent();
     }
     this(string ID, dstring rawText) {
         super(ID);
         styleId = STYLE_TEXT;
         _text.value = rawText;
+        requestMeasureContent();
     }
     this(string ID, UIString uitext) {
         super(ID);
         styleId = STYLE_TEXT;
         _text = uitext;
+        requestMeasureContent();
     }
 
     /// max lines to show
     @property int maxLines() { return style.maxLines; }
     /// set max lines to show
-    @property TextWidget maxLines(int n) { ownStyle.maxLines = n; return this; }
+    @property TextWidget maxLines(int n) {
+        ownStyle.maxLines = n;
+        requestMeasureContent();
+        return this;
+    }
 
     protected UIString _text;
     /// get widget text
@@ -99,49 +106,87 @@ class TextWidget : Widget {
     /// set text to show
     override @property Widget text(dstring s) { 
         _text = s; 
+        requestMeasureContent();
         requestLayout();
         return this;
     }
     /// set text to show
     override @property Widget text(UIString s) { 
         _text = s;
+        requestMeasureContent();
         requestLayout();
         return this;
     }
     /// set text resource ID to show
     @property Widget textResource(string s) { 
         _text = s; 
+        requestMeasureContent();
         requestLayout();
         return this;
     }
 
     private CalcSaver!(Font, dstring, uint, uint, int) _measureSaver;
 
-    override void measure(int parentWidth, int parentHeight) {
+    override bool contentSizeDependOnWidgetSize() {
+        return true;
+    }
+
+    private int _widthForContentSize = 70; // tutaj trzeba dodać minimalny tekst i sprawdzenie jeżeli tekst jest krótszy niż minimalny to zezwolić ewentualnie musi być minimalnie jak 
+
+    private @property int widthForContentSize() {
+        return _widthForContentSize;
+    }
+
+    /// some controls like multiline text needs one dimension to calculate second (cotrols that )
+    private @property void widthForContentSize(int newWidth) {
+        if (_widthForContentSize != newWidth) {
+            _widthForContentSize = newWidth;
+            requestMeasureContent();
+            requestLayout();
+        }
+    }
+    
+    override void measureContentSize() {
+        if (!_needMeasureContent)
+            return;
+
         FontRef font = font();
         
         uint w;
         if (maxLines == 1) 
             w = MAX_WIDTH_UNSPECIFIED;
-        else {
-            w = parentWidth - margins.left - margins.right - padding.left - padding.right;
-            if (maxWidth > 0 && maxWidth < w)
-                w = maxWidth - padding.left - padding.right;
-        }
-        uint flags = textFlags;
+        else 
+            w = _widthForContentSize;
 
-        // optimization: do not measure if nothing changed
-        if (_measureSaver.check(font.get, text, w, flags, maxLines) || _needLayout) {
-            Point sz;
-            if (maxLines == 1) {
-                sz = font.textSize(text, w, 4, 0, flags);
-            } else {
-                sz = font.measureMultilineText(text, maxLines, w, 4, 0, flags);
-            }
-            // it's not very correct, but in such simple widget it doesn't make issues
-            measuredContent(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED, sz.x, sz.y);
-            _needLayout = false;
+        Point sz;
+        
+        if (maxLines == 1) {
+            sz = font.textSize(text, w, 4, 0, textFlags);
+        } else {
+            sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
         }
+
+        _measuredContentWidth = sz.x;
+        _measuredContentHeight = sz.y;
+
+        Log.d("MTekst content size: ", sz);
+        _needMeasureContent = false;
+    }
+
+    override void measureSize(int parentWidth, int parentHeight) {
+        Log.d("MTekst parent width: ", parentWidth);
+        Rect m = margins;
+        Rect p = padding;
+        // calc size constraints for children
+        int pwidth = parentWidth;
+        int pheight = parentHeight;
+        pwidth -= m.left + m.right + p.left + p.right;
+        pheight -= m.top + m.bottom + p.top + p.bottom;
+        
+        widthForContentSize = pwidth;
+        measureMinSize();
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
+        Log.d("MTekst content size: ", measuredMinWidth, " ", measuredMinHeight);
     }
 
     override void onDraw(DrawBuf buf) {
@@ -172,14 +217,17 @@ class TextWidget : Widget {
 class MultilineTextWidget : TextWidget {
     this(string ID = null, string textResourceId = null) {
         super(ID, textResourceId);
+        layoutWidth(FILL_PARENT);
         styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, dstring rawText) {
         super(ID, rawText);
+        layoutWidth(FILL_PARENT);
         styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, UIString uitext) {
         super(ID, uitext);
+        layoutWidth(FILL_PARENT);
         styleId = STYLE_MULTILINE_TEXT;
     }
 }
@@ -192,21 +240,28 @@ class SwitchButton : Widget {
         clickable = true;
         focusable = true;
         trackHover = true;
+        requestMeasureContent();
     }
     // called to process click and notify listeners
     override protected bool handleClick() {
         checked = !checked;
         return super.handleClick();
     }
-    override void measure(int parentWidth, int parentHeight) { 
+
+    override void measureContentSize() {
+        if (!_needMeasureContent)
+            return;
+
         DrawableRef img = backgroundDrawable;
-        int w = 0;
-        int h = 0;
+        _measuredContentWidth = 0;
+        _measuredContentHeight = 0;
+        
         if (!img.isNull) {
-            w = img.width;
-            h = img.height;
+            _measuredContentWidth = img.width;
+            _measuredContentHeight = img.height;
         }
-        measuredContent(parentWidth, parentHeight, w, h);
+
+        _needMeasureContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -237,6 +292,7 @@ class ImageWidget : Widget {
     this(string ID = null, string drawableId = null) {
         super(ID);
         _drawableId = drawableId;
+        requestMeasureContent();
     }
 
     ~this() {
@@ -249,6 +305,7 @@ class ImageWidget : Widget {
     @property ImageWidget drawableId(string id) { 
         _drawableId = id;
         _drawable.clear();
+        requestMeasureContent();
         requestLayout();
         return this;
     }
@@ -272,6 +329,7 @@ class ImageWidget : Widget {
             return this;
         _drawableId = drawableId; 
         _drawable.clear();
+        requestMeasureContent();
         requestLayout();
         return this;
     }
@@ -287,15 +345,20 @@ class ImageWidget : Widget {
             _drawable.clear(); // remove cached drawable
     }
 
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measureContentSize() {
+        if (!_needMeasureContent)
+            return;
+
         DrawableRef img = drawable;
-        int w = 0;
-        int h = 0;
+        _measuredContentWidth = 0;
+        _measuredContentHeight = 0;
+        
         if (!img.isNull) {
-            w = img.width;
-            h = img.height;
+            _measuredContentWidth = img.width;
+            _measuredContentHeight = img.height;
         }
-        measuredContent(parentWidth, parentHeight, w, h);
+
+        _needMeasureContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -410,16 +473,27 @@ class ImageTextButton : HorizontalLayout {
         if (!_icon || !_label)
             return super.orientation(value);
         if (value != orientation) {
-            super.orientation(value);
-            if (value == Orientation.Horizontal) {
-                _icon.alignment = Align.Left | Align.VCenter;
-                _label.alignment = Align.Right | Align.VCenter;
-            } else {
-                _icon.alignment = Align.Top | Align.HCenter;
-                _label.alignment = Align.Bottom | Align.HCenter;
-            }
+            updateOrientation(value);
         }
         return this; 
+    }
+
+    protected void updateOrientation(Orientation value) {
+        if (!_icon || !_label) {
+            super.orientation(value);
+            return;
+        }
+        super.orientation(value);
+        final switch(_orientation) {
+            case Orientation.Horizontal:
+                _icon.alignment = Align.Left | Align.VCenter;
+                _label.alignment = Align.Left | Align.VCenter;
+                break;
+            case Orientation.Vertical:
+                _icon.alignment = Align.HCenter | Align.VCenter;
+                _label.alignment = Align.HCenter | Align.VCenter;
+                break;
+        }
     }
 
     protected void initialize(string drawableId, UIString caption) {
@@ -430,11 +504,13 @@ class ImageTextButton : HorizontalLayout {
         _label.styleId = STYLE_BUTTON_LABEL;
         _icon.state = State.Parent;
         _label.state = State.Parent;
+        _label.layoutWidth(FILL_PARENT);
         addChild(_icon);
         addChild(_label);
         clickable = true;
         focusable = true;
         trackHover = true;
+        updateOrientation(_orientation);
     }
 
     this(string ID = null, string drawableId = null, string textResourceId = null) {
@@ -469,6 +545,8 @@ class UrlImageTextButton : ImageTextButton {
         //_label.styleId = STYLE_BUTTON_LABEL;
         //_label.textFlags(TextFlag.Underline);
         _label.styleId = "BUTTON_LABEL_LINK";
+        _label.resetStyle();
+        updateOrientation(orientation);
         static if (BACKEND_GUI) padding(Rect(3,3,3,3));
     }
 }
@@ -572,9 +650,9 @@ class RadioButton : ImageTextButton {
 class Button : Widget {
     protected UIString _text;
     override @property dstring text() const { return _text; }
-    override @property Widget text(dstring s) { _text = s; requestLayout(); return this; }
-    override @property Widget text(UIString s) { _text = s; requestLayout(); return this; }
-    @property Widget textResource(string s) { _text = s; requestLayout(); return this; }
+    override @property Widget text(dstring s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
+    override @property Widget text(UIString s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
+    @property Widget textResource(string s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
     /// empty parameter list constructor - for usage by factory
     this() {
         super(null);
@@ -587,6 +665,7 @@ class Button : Widget {
         clickable = true;
         focusable = true;
         trackHover = true;
+        requestMeasureContent();
     }
 
     /// create with ID parameter
@@ -612,10 +691,16 @@ class Button : Widget {
         action = a;
     }
 
-    override void measure(int parentWidth, int parentHeight) { 
+    override void measureContentSize() {
+        if (!_needMeasureContent)
+            return;
+            
         FontRef font = font();
         Point sz = font.textSize(text);
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+
+        _measuredContentWidth = sz.x;
+        _measuredContentHeight = sz.y;
+        _needMeasureContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -648,10 +733,6 @@ class CanvasWidget : Widget {
 
     this(string ID = null) {
         super(ID);
-    }
-
-    override void measure(int parentWidth, int parentHeight) { 
-        measuredContent(parentWidth, parentHeight, 0, 0);
     }
 
     void doDraw(DrawBuf buf, Rect rc) {

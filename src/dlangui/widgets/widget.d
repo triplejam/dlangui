@@ -359,10 +359,18 @@ public:
     /// set widget style id
     @property Widget styleId(string id) {
         _styleId = id;
-        if (_ownStyle)
+        if (_ownStyle) {
             _ownStyle.parentStyleId = id;
+        }
         _cachedStyle = currentTheme.get(id);
         return this;
+    }
+    /// resets style to default
+    void resetStyle() {
+        if (_ownStyle) {
+            destroy(_ownStyle);
+            _ownStyle = null;
+        }
     }
     /// get margins (between widget bounds and its background)
     @property Rect margins() const { return style.margins; }
