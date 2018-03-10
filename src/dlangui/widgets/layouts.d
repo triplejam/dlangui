@@ -55,6 +55,7 @@ struct LayoutItem {
     @property bool fillParent() { return _fillParent; }
     @property int weight() { return _weight; }
     @property bool heightDependsOnWidth() { return _widget.heightDependOnWidth; }
+    @property ubyte alignment() {return _widget.alignment; }
     // just to help GC
     void clear() {
         _widget = null;
@@ -433,12 +434,29 @@ class LayoutItems {
             Rect childRect = rc;
             if (_orientation == Orientation.Vertical) {
                 // Vertical
+                if (item.secondarySize < rc.width){
+                    if ((item.alignment & Align.HCenter) == Align.HCenter) {
+                        childRect.left += ((rc.width - item.secondarySize)/2);
+                    }
+                    else if ((item.alignment & Align.Right) == Align.Right) {
+                        childRect.left += (rc.width - item.secondarySize);
+                    }
+                }
+                
                 childRect.top += position;
                 childRect.bottom = childRect.top + size;
                 childRect.right = childRect.left + item.secondarySize;
                 item.layout(childRect);
             } else {
                 // Horizontal
+                if (item.secondarySize < rc.height){
+                    if ((item.alignment & Align.VCenter) == Align.VCenter) {
+                        childRect.top += ((rc.height - item.secondarySize)/2);
+                    }
+                    else if ((item.alignment & Align.Bottom) == Align.Bottom) {
+                        childRect.top += (rc.height - item.secondarySize);
+                    }
+                }
                 childRect.left += position;
                 childRect.right = childRect.left + size;
                 childRect.bottom = childRect.top + item.secondarySize;
