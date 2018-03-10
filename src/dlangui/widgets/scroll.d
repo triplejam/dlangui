@@ -305,13 +305,12 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         return sz;
     }
 
-    // override to set minimum scrollwidget size - default 100x100
-    Point minimumVisibleContentSize() {
-        return Point(100,100);
+    override void measureMinSize() {
+        adjustMeasuredMinSize(100, 100);
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone) {
             return;
         }
@@ -330,27 +329,19 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         if (_hscrollbar && (_hscrollbarMode == ScrollBarMode.Visible || _hscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _hscrollbar.visibility;
             _hscrollbar.visibility = Visibility.Visible;
-            _hscrollbar.measure(pwidth, pheight);
+            _hscrollbar.measureSize(pwidth, pheight);
             hsbh = _hscrollbar.measuredHeight;
             _hscrollbar.visibility = oldVisibility;
         }
         if (_vscrollbar && (_vscrollbarMode == ScrollBarMode.Visible || _vscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _vscrollbar.visibility;
             _vscrollbar.visibility = Visibility.Visible;
-            _vscrollbar.measure(pwidth, pheight);
+            _vscrollbar.measureSize(pwidth, pheight);
             vsbw = _vscrollbar.measuredWidth;
             _vscrollbar.visibility = oldVisibility;
         }
-        Point sz = minimumVisibleContentSize();
-        
-        //if (_hscrollbar && _hscrollbarMode == ScrollBarMode.Visible) {
-            sz.y += hsbh;
-        //}
-        //if (_vscrollbar && _vscrollbarMode == ScrollBarMode.Visible) {
-            sz.x += vsbw;
-        //}
 
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredMinWidth + vsbw, _measuredMinHeight + hsbh);
     }
 
     /// override to support modification of client rect after change, e.g. apply offset
@@ -503,9 +494,9 @@ class ScrollWidget :  ScrollWidgetBase {
         // override it
         Point sz;
         if (_contentWidget) {
-            _contentWidget.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            sz.x = _contentWidget.measuredWidth;
-            sz.y = _contentWidget.measuredHeight;
+            _contentWidget.measureMinSize();
+            sz.x = _contentWidget.measuredMinWidth;
+            sz.y = _contentWidget.measuredMinHeight;
         }
         _fullScrollableArea.right = sz.x;
         _fullScrollableArea.bottom = sz.y;
