@@ -435,13 +435,13 @@ class LayoutItems {
                 // Vertical
                 childRect.top += position;
                 childRect.bottom = childRect.top + size;
-                childRect.right = childRect.left + contentSecondarySize;
+                childRect.right = childRect.left + item.secondarySize;
                 item.layout(childRect);
             } else {
                 // Horizontal
                 childRect.left += position;
                 childRect.right = childRect.left + size;
-                childRect.bottom = childRect.top + contentSecondarySize;
+                childRect.bottom = childRect.top + item.secondarySize;
                 item.layout(childRect);
             }
             position += size;
