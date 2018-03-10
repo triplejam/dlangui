@@ -638,7 +638,7 @@ class TabControl : WidgetGroupDefaultDrawing {
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         //Log.d("tabControl.measure enter");
         Rect m = margins;
         Rect p = padding;
@@ -652,7 +652,7 @@ class TabControl : WidgetGroupDefaultDrawing {
         // measure children
         Point sz;
         if (_moreButton.visibility == Visibility.Visible) {
-            _moreButton.measure(pwidth, pheight);
+            _moreButton.measureSize(pwidth, pheight);
             sz.x = _moreButton.measuredWidth;
             sz.y = _moreButton.measuredHeight;
         }
@@ -660,14 +660,14 @@ class TabControl : WidgetGroupDefaultDrawing {
         for (int i = 1; i < _children.count; i++) {
             Widget tab = _children.get(i);
             tab.visibility = Visibility.Visible;
-            tab.measure(pwidth, pheight);
+            tab.measureSize(pwidth, pheight);
             if (sz.y < tab.measuredHeight)
                 sz.y = tab.measuredHeight;
             if (sz.x + tab.measuredWidth > pwidth)
                 break;
             sz.x += tab.measuredWidth - _buttonOverlap;
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
         //Log.d("tabControl.measure exit");
     }
 
@@ -696,7 +696,7 @@ class TabControl : WidgetGroupDefaultDrawing {
         for (int i = 0; i < sorted.length; i++) {
             TabItemWidget widget = sorted[i];
             widget.visibility = Visibility.Visible;
-            widget.measure(rc.width, rc.height);
+            widget.measureSize(rc.width, rc.height);
             if (w + widget.measuredWidth < maxw) {
                 w += widget.measuredWidth - _buttonOverlap;
             } else {
