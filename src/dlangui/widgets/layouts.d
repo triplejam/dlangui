@@ -116,6 +116,7 @@ struct LayoutItem {
 /// helper class for layouts
 class LayoutItems {
     Orientation _orientation;
+    ubyte _alignment;
     LayoutItem[] _list;
     LayoutItem*[] _heightDependOnWidthItemsList;
     int _count;
@@ -130,10 +131,11 @@ class LayoutItems {
     int _layoutWidth;
     int _layoutHeight;
 
-    void setLayoutParams(Orientation orientation, int layoutWidth, int layoutHeight) {
+    void setLayoutParams(Orientation orientation, int layoutWidth, int layoutHeight, ubyte alignment) {
         _orientation = orientation;
         _layoutWidth = layoutWidth;
         _layoutHeight = layoutHeight;
+        _alignment = alignment;
     }
 
     bool heightDependOnWidth() {
@@ -313,19 +315,33 @@ class LayoutItems {
         // measure again - available area could be changed
         if (_measureParentSize.x != rc.width || _measureParentSize.y != rc.height)
             measureSize(rc.width, rc.height);
-        int contentSecondarySize = 0;
 
+        int mainSizeDelta = 0; // used in alignment
+
+        // main size alignment
         if (_orientation == Orientation.Vertical) {
-            if (_layoutWidth == WRAP_CONTENT)
-                contentSecondarySize = _maxSecondarySize;
-            else
-                contentSecondarySize = rc.width;
+            if (_totalSize < rc.height) {
+                if ((_alignment & Align.VCenter) == Align.VCenter) {
+                    mainSizeDelta = (rc.height - _totalSize) / 2;
+                }
+                else if ((_alignment & Align.Bottom) == Align.Bottom) {
+                    mainSizeDelta = rc.height - _totalSize;
+                }
+            }
         } else {
-            if (_layoutHeight == WRAP_CONTENT)
-                contentSecondarySize = _maxSecondarySize;
-            else
-                contentSecondarySize = rc.height;
+            if (_totalSize < rc.width) {
+                
+                if ((_alignment & Align.HCenter) == Align.HCenter) {
+                    mainSizeDelta = (rc.width - _totalSize) / 2;
+                }
+                else if ((_alignment & Align.Right) == Align.Right) {
+                    mainSizeDelta = rc.width - _totalSize;
+                }
+            }
         }
+        
+        
+        
         
         /*
         int contentHeight = 0;
@@ -412,7 +428,7 @@ class LayoutItems {
             }
         }*/
         // final resize and layout of children
-        int position = 0;
+        int position = mainSizeDelta;
         int deltaTotal = 0;
         for (int i = 0; i < _count; i++) {
             LayoutItem * item = &_list[i];
@@ -434,15 +450,16 @@ class LayoutItems {
             Rect childRect = rc;
             if (_orientation == Orientation.Vertical) {
                 // Vertical
+                // secondary size alignment
                 if (item.secondarySize < rc.width){
-                    if ((item.alignment & Align.HCenter) == Align.HCenter) {
-                        childRect.left += ((rc.width - item.secondarySize)/2);
+                    if ((_alignment & Align.HCenter) == Align.HCenter) {
+                        childRect.left += ((rc.width - item.secondarySize) / 2);
                     }
-                    else if ((item.alignment & Align.Right) == Align.Right) {
+                    else if ((_alignment & Align.Right) == Align.Right) {
                         childRect.left += (rc.width - item.secondarySize);
                     }
                 }
-                
+
                 childRect.top += position;
                 childRect.bottom = childRect.top + size;
                 childRect.right = childRect.left + item.secondarySize;
@@ -450,10 +467,10 @@ class LayoutItems {
             } else {
                 // Horizontal
                 if (item.secondarySize < rc.height){
-                    if ((item.alignment & Align.VCenter) == Align.VCenter) {
-                        childRect.top += ((rc.height - item.secondarySize)/2);
+                    if ((_alignment & Align.VCenter) == Align.VCenter) {
+                        childRect.top += ((rc.height - item.secondarySize) / 2);
                     }
-                    else if ((item.alignment & Align.Bottom) == Align.Bottom) {
+                    else if ((_alignment & Align.Bottom) == Align.Bottom) {
                         childRect.top += (rc.height - item.secondarySize);
                     }
                 }
@@ -746,7 +763,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
     
     override void measureMinSize() {
         // measure children
-        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight);
+        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight, alignment);
         _layoutItems.setWidgets(_children);
         Point sz = _layoutItems.measureMinSize();
         Log.d("Id ", id, " min size ", sz, "layouts items", _layoutItems._count);
@@ -772,7 +789,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
         pheight -= m.top + m.bottom + p.top + p.bottom;
         
         // measure children
-        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight);
+        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight, alignment);
         _layoutItems.setWidgets(_children);
         Point sz = _layoutItems.measureSize(pwidth, pheight);
         adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
