@@ -42,6 +42,7 @@ struct LayoutItem {
     int _weight; // weight
     bool _fillParent;
     bool _isResizer;
+    bool _heightDependsOnWidths = false;
     int  _resizerDelta;
     @property bool canExtend() { return !_isResizer; }
     @property int measuredSize() { return _measuredSize; }
@@ -53,6 +54,7 @@ struct LayoutItem {
     @property int secondaryMinSize() { return _secondaryMinSize; }
     @property bool fillParent() { return _fillParent; }
     @property int weight() { return _weight; }
+    @property bool heightDependsOnWidth() { return _widget.heightDependOnWidth; }
     // just to help GC
     void clear() {
         _widget = null;
@@ -114,8 +116,10 @@ struct LayoutItem {
 class LayoutItems {
     Orientation _orientation;
     LayoutItem[] _list;
+    LayoutItem*[] _heightDependOnWidthItemsList;
     int _count;
     int _totalSize;
+    int _totalSizeWithOutHeightDependOnWidths;
     int _maxSecondarySize;
     int _maxSecondaryMinSize;
     Point _measureParentSize;
@@ -131,11 +135,17 @@ class LayoutItems {
         _layoutHeight = layoutHeight;
     }
 
+    bool heightDependOnWidth() {
+        return (_heightDependOnWidthItemsList.length > 0);
+    }    
+
     /// fill widget layout list with Visible or Invisible items, measure them
     Point measureMinSize() {
         layoutWeightSum = 0;
+        _heightDependOnWidthItemsList.length = 0;
         
         _totalSize = 0;
+        _totalSizeWithOutHeightDependOnWidths = 0;
         _maxSecondaryMinSize = 0;
         bool hasPercentSizeWidget = false;
         size_t percenSizeWidgetIndex;
@@ -145,8 +155,15 @@ class LayoutItems {
             LayoutItem * item = &_list[i];
 
             item.measureMinSize();
-            if (item.fillParent) 
+            if (item.fillParent) {
                 layoutWeightSum += item.weight;
+            }
+
+            if (item.heightDependsOnWidth) {
+                _heightDependOnWidthItemsList ~= item;
+            }
+            else if (!isPercentSize(item._layoutSize)) 
+                _totalSizeWithOutHeightDependOnWidths += item._measuredMinSize;
 
             if (isPercentSize(item._layoutSize)) {
                 if (!hasPercentSizeWidget) {
@@ -156,7 +173,7 @@ class LayoutItems {
             }
             else
                 _totalSize += item._measuredMinSize;
-                Log.d("rozmiar elementu", item._measuredMinSize);
+                Log.d("item size ", item._measuredMinSize);
 
             if (_maxSecondaryMinSize < item._secondaryMinSize)
                 _maxSecondaryMinSize = item._secondaryMinSize;
@@ -183,15 +200,37 @@ class LayoutItems {
         size_t percenSizeWidgetIndex;
 
         int extraSpace = 0;
+        int usedSpace = itemsMinSizeSum;
+        Log.d("used space1 ",usedSpace);
+        // need to measure some widgets again (because they can change their size)
+        if (_heightDependOnWidthItemsList.length > 0) {
+            usedSpace = _totalSizeWithOutHeightDependOnWidths;
+            Log.d("used space2 ",usedSpace);
+            
+            foreach (LayoutItem* item ; _heightDependOnWidthItemsList) {
+                if (_orientation == Orientation.Horizontal)
+                    item.measureSize(item.measuredMinSize, parentHeight > _maxSecondaryMinSize ? parentHeight : _maxSecondaryMinSize);
+                else
+                    item.measureSize(parentWidth > _maxSecondaryMinSize ? parentWidth : _maxSecondaryMinSize , item.measuredMinSize);
+
+                usedSpace += item._measuredSize;
+            }
+
+            Log.d("used space3 ",usedSpace);
+        }
+            
         if (_orientation == Orientation.Horizontal) 
-            extraSpace = parentWidth - itemsMinSizeSum;
+            extraSpace = parentWidth - usedSpace;
         else
-            extraSpace = parentHeight - itemsMinSizeSum;
+            extraSpace = parentHeight - usedSpace;
+
+        if (_orientation == Orientation.Vertical)
+        Log.d(" parentHeight ", parentHeight);
 
         if (extraSpace < 1 || layoutWeightSum == 0) {
             for (int i = 0; i < _count; i++) {
                 LayoutItem * item = &_list[i];
-                //second size is parent size or max secondary size 
+                //second size is parent size or max secondary size
                 if (_orientation == Orientation.Horizontal)
                     item.measureSize(item.measuredMinSize, parentHeight > _maxSecondaryMinSize ? parentHeight : _maxSecondaryMinSize);
                 else
@@ -215,7 +254,7 @@ class LayoutItems {
             int extraSpaceRemained = extraSpace;
             int extraSpaceStep = extraSpace / layoutWeightSum;
             
-            // być może trzeba dodać sumowanie kroków, które już są dodane żeby nie wyjechać poza zakres przez zaokrąglenia
+            // maybe we need add step sum to not exceed extraSpace due to rounds
             for (int i = 0; i < _count; i++) {
                 LayoutItem * item = &_list[i];
                 
@@ -680,6 +719,12 @@ class LinearLayout : WidgetGroupDefaultDrawing {
     }
 
     LayoutItems _layoutItems;
+
+    /// set to true if change widget width makes new widget heights
+    override bool heightDependOnWidth() {
+        return _layoutItems.heightDependOnWidth();
+    }
+    
     
     override void measureMinSize() {
         // measure children
