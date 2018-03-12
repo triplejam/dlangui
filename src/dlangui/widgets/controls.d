@@ -535,23 +535,43 @@ class ImageTextButton : HorizontalLayout {
     }
 
     protected void updateOrientation(Orientation value) {
-        if (!_icon || !_label) {
-            super.orientation(value);
-            return;
-        }
         super.orientation(value);
-        final switch(_orientation) {
+
+        final switch(value) {
             case Orientation.Horizontal:
-                _icon.alignment = Align.Left | Align.VCenter;
-                _label.alignment = Align.Left | Align.VCenter;
+                alignment = Align.Left | Align.VCenter;
+                if (_label)
+                    _label.alignment = Align.Left | Align.VCenter;
                 break;
             case Orientation.Vertical:
-                _icon.alignment = Align.HCenter | Align.VCenter;
-                _label.alignment = Align.HCenter | Align.VCenter;
+                alignment = Align.HCenter | Align.VCenter;
+                if (_label)
+                    _label.alignment = Align.HCenter | Align.VCenter;
+                
                 break;
         }
     }
 
+    @property bool wordWrap() {
+//        if(!_label)
+//            return false;
+
+        return (_label.maxLines==0);
+    }
+
+    @property void wordWrap(bool newWordWrap) {
+        if (wordWrap != newWordWrap) {
+            if (newWordWrap) {
+                _label.maxLines = 0;
+                layoutWidth(FILL_PARENT);
+            }
+            else {
+                _label.maxLines = 1;
+            }
+        }
+        requestLayout();
+    }
+    
     protected void initialize(string drawableId, UIString caption) {
         styleId = STYLE_BUTTON;
         _icon = new ImageWidget("icon", drawableId);
@@ -567,6 +587,7 @@ class ImageTextButton : HorizontalLayout {
         focusable = true;
         trackHover = true;
         updateOrientation(_orientation);
+        wordWrap = false;
     }
 
     this(string ID = null, string drawableId = null, string textResourceId = null) {
@@ -622,15 +643,12 @@ class LinkButton : ImageTextButton {
 class CheckBox : ImageTextButton {
     this(string ID = null, string textResourceId = null) {
         super(ID, "btn_check", textResourceId);
-        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, dstring labelText) {
         super(ID, "btn_check", labelText);
-        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     this(string ID, UIString label) {
         super(ID, "btn_check", label);
-        _label.styleId = STYLE_MULTILINE_TEXT;
     }
     override protected void initialize(string drawableId, UIString caption) {
         super.initialize(drawableId, caption);
