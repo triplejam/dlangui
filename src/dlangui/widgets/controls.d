@@ -125,7 +125,10 @@ class TextWidget : Widget {
         return this;
     }
 
-    private CalcSaver!(Font, dstring, uint, uint, int) _measureSaver;
+    override void requestMeasureContent() {
+        _needMeasureMinContentSize = true;
+        super.requestMeasureContent();
+    }
 
     override bool contentSizeDependOnWidgetSize() {
         return true;
@@ -136,7 +139,11 @@ class TextWidget : Widget {
         return (maxLines != 1);
     }
 
-    private int _widthForContentSize = 70; // tutaj trzeba dodać minimalny tekst i sprawdzenie jeżeli tekst jest krótszy niż minimalny to zezwolić ewentualnie musi być minimalnie jak 
+    private int _widthForContentSize = 0; 
+    private int _widthForMinContentSize = 70;
+    private int _needMeasureMinContentSize = true;
+    private int _measuredMinContentWidth = 0;
+    private int _measuredMinContentHeight = 0;
 
     private @property int widthForContentSize() {
         return _widthForContentSize;
@@ -146,15 +153,59 @@ class TextWidget : Widget {
     private @property void widthForContentSize(int newWidth) {
         if (_widthForContentSize != newWidth) {
             _widthForContentSize = newWidth;
-            requestMeasureContent();
-            requestLayout();
+            if (maxLines != 1) {
+                _needMeasureContent = true;
+                requestLayout();
+            }
+        }
+    }
+
+    private @property void widthForMinContentSize(int newWidth) {
+        if (_widthForMinContentSize != newWidth) {
+            _widthForMinContentSize = newWidth;
+            if (maxLines != 1) {
+                _needMeasureMinContentSize = true;
+                //requestLayout();
+            }
         }
     }
     
+    override void measureMinSize() {
+        measureMinContentSize();
+        adjustMeasuredMinSize(_measuredMinContentWidth, _measuredMinContentHeight);
+    }
+
+    void measureMinContentSize() {
+        if (!_needMeasureMinContentSize)
+            return;
+
+        FontRef font = font();
+        
+        uint w;
+        if (maxLines == 1) 
+            w = MAX_WIDTH_UNSPECIFIED;
+        else 
+            w = _widthForMinContentSize;
+
+        Point sz;
+        
+        if (maxLines == 1) {
+            sz = font.textSize(text, w, 4, 0, textFlags);
+        } else {
+            sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
+        }
+
+        _measuredMinContentWidth = sz.x;
+        _measuredMinContentHeight = sz.y;
+
+        _needMeasureMinContentSize = false;
+    }
+
+            
     override void measureContentSize() {
         if (!_needMeasureContent)
             return;
-
+            
         FontRef font = font();
         
         uint w;
@@ -174,12 +225,11 @@ class TextWidget : Widget {
         _measuredContentWidth = sz.x;
         _measuredContentHeight = sz.y;
 
-        ////Log.d("MText content size: ", sz);
         _needMeasureContent = false;
     }
 
     override void measureSize(int parentWidth, int parentHeight) {
-        ////Log.d("MText parent width: ", parentWidth);
+        //Log.d("measure size ", _measuredContentWidth);
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -189,7 +239,8 @@ class TextWidget : Widget {
         pheight -= m.top + m.bottom + p.top + p.bottom;
         
         widthForContentSize = pwidth;
-        measureMinSize();
+        
+        measureContentSize();
         adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
         ////Log.d("MText content size: ", measuredMinWidth, " ", measuredMinHeight);
     }
