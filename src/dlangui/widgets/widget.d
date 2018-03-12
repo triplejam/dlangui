@@ -1415,11 +1415,17 @@ public:
         // check for fixed size set in layoutWidth, layoutHeight
         int lh = layoutHeight;
         int lw = layoutWidth;
-        // constant value support
-        if (!(isPercentSize(lh) || isSpecialSize(lh)))
+        // constant value, and percent size support
+
+        if (isPercentSize(lh))
+            dy = parentHeight;
+        else if (!(isPercentSize(lh) || isSpecialSize(lh)))
             dy = lh.toPixels();
-        if (!(isPercentSize(lw) || isSpecialSize(lw)))
+        if (isPercentSize(lw))
+            dx = parentWidth;
+        else if (!(isPercentSize(lw) || isSpecialSize(lw)))
             dx = lw.toPixels();
+        
         // apply min/max width and height constraints
         int minw = minWidth;
         int maxw = maxWidth;
@@ -1451,7 +1457,7 @@ public:
 
     /// helper function for implement measureMinSize() when widget's content dimensions are known
     protected void adjustMeasuredMinSize(int mWidth, int mHeight) {
-        // być moze powinno wylecieć
+        // maybe not neccesary
         if (visibility == Visibility.Gone) {
             _measuredMinWidth = _measuredMinHeight = 0;
             return;
