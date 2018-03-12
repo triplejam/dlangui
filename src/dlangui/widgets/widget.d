@@ -291,6 +291,8 @@ public:
         if (_cachedStyle) {
             _cachedStyle = currentTheme.get(_styleId);
         }
+        requestMeasureContent();
+        requestLayout();
     }
 
     /// returns widget id, null if not set
