@@ -55,9 +55,6 @@ class VSpacer : Widget {
     this() {
         styleId = STYLE_VSPACER;
     }
-    //override void measure(int parentWidth, int parentHeight) { 
-    //    measuredContent(parentWidth, parentHeight, 8, 8);
-    //}
 }
 
 /// horizontal spacer to fill empty space in horizontal layouts
@@ -65,9 +62,6 @@ class HSpacer : Widget {
     this() {
         styleId = STYLE_HSPACER;
     }
-    //override void measure(int parentWidth, int parentHeight) { 
-    //    measuredContent(parentWidth, parentHeight, 8, 8);
-    //}
 }
 
 /// static text widget
@@ -155,7 +149,7 @@ class TextWidget : Widget {
             _widthForContentSize = newWidth;
             if (maxLines != 1) {
                 _needMeasureContent = true;
-                requestLayout();
+                //requestLayout();
             }
         }
     }
@@ -196,7 +190,10 @@ class TextWidget : Widget {
         }
 
         _measuredMinContentWidth = sz.x;
-        _measuredMinContentHeight = sz.y;
+        if (maxLines == 1)
+            _measuredMinContentHeight = sz.y;
+        else
+            _measuredMinContentHeight = 1; // this is width to height case so only width is important for height return 1 will be recalculated in next step (in layouts).
 
         _needMeasureMinContentSize = false;
     }

@@ -1442,17 +1442,12 @@ public:
         if (maxh != SIZE_UNSPECIFIED && dy > maxh)
             dy = maxh;
         // apply FILL_PARENT
-        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT)
+        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && mWidth < parentWidth)
             dx = parentWidth;
-        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT)
+        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && mHeight < parentHeight)
             dy = parentHeight;
         // apply max parent size constraint
         
-        // breaks minimal size so commented:
-        /*if (parentWidth != SIZE_UNSPECIFIED && dx > parentWidth)
-            dx = parentWidth;
-        if (parentHeight != SIZE_UNSPECIFIED && dy > parentHeight)
-            dy = parentHeight;*/
         _measuredWidth = dx;
         _measuredHeight = dy;
     }
@@ -1490,12 +1485,6 @@ public:
             dx = maxw;
         if (maxh != SIZE_UNSPECIFIED && dy > maxh)
             dy = maxh;
-        // apply FILL_PARENT
-        //if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT)
-        //    dx = parentWidth;
-        //if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT)
-        //    dy = parentHeight;
-        // apply max parent size constraint
         _measuredMinWidth = dx;
         _measuredMinHeight = dy;
     }
