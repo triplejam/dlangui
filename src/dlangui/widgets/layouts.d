@@ -56,6 +56,8 @@ struct LayoutItem {
     @property int weight() { return _weight; }
     @property bool heightDependsOnWidth() { return _widget.heightDependOnWidth; }
     @property ubyte alignment() {return _widget.alignment; }
+    @property bool fillHeight() {return _widget.layoutHeight == FILL_PARENT; }
+    @property bool fillWidth() {return _widget.layoutWidth == FILL_PARENT; }
     // just to help GC
     void clear() {
         _widget = null;
@@ -129,6 +131,8 @@ class LayoutItems {
     int layoutWeightSum;
     bool _hasPercentSizeWidget = false;
     size_t _percenSizeWidgetIndex;
+    bool _hasFillHeightChilds = false;
+    bool _hasFillWidthChilds = false;
 
     int ee;
     
@@ -144,7 +148,15 @@ class LayoutItems {
 
     bool heightDependOnWidth() {
         return (_heightDependOnWidthItemsList.length > 0);
-    }    
+    }
+
+    @property bool hasFillHeightChilds() {
+        return _hasFillHeightChilds;
+    }
+
+    @property bool hasFillWidthChilds() {
+        return _hasFillWidthChilds;
+    }
 
     /// fill widget layout list with Visible or Invisible items, measure them
     Point measureMinSize() {
@@ -155,6 +167,8 @@ class LayoutItems {
         _totalSizeWithOutHeightDependOnWidths = 0;
         _maxSecondaryMinSize = 0;
         _hasPercentSizeWidget = false;
+        _hasFillHeightChilds = false;
+        _hasFillWidthChilds = false;
         
         // measure
         for (int i = 0; i < _count; i++) {
@@ -183,6 +197,13 @@ class LayoutItems {
 
             if (_maxSecondaryMinSize < item._secondaryMinSize)
                 _maxSecondaryMinSize = item._secondaryMinSize;
+
+            if (!_hasFillWidthChilds)
+                _hasFillWidthChilds = item.fillWidth;
+
+            if (!_hasFillHeightChilds)
+                _hasFillHeightChilds = item.fillHeight;
+
         }
         
         if (_hasPercentSizeWidget) {
@@ -825,6 +846,63 @@ class LinearLayout : WidgetGroupDefaultDrawing {
         _layoutItems.layout(rc);
     }
 
+    bool hasFillWidthChilds() {
+        return _layoutItems.hasFillWidthChilds();
+    }
+    
+    bool hasFillHeightChilds() {
+        return _layoutItems.hasFillHeightChilds();
+    }
+    
+    protected override void adjustMeasuredSize(int parentWidth, int parentHeight, int mWidth, int mHeight) {
+        if (visibility == Visibility.Gone) {
+            _measuredWidth = _measuredHeight = 0;
+            return;
+        }
+        Rect m = margins;
+        Rect p = padding;
+        // summarize margins, padding, and content size
+        int dx = m.left + m.right + p.left + p.right + mWidth;
+        int dy = m.top + m.bottom + p.top + p.bottom + mHeight;
+        // check for fixed size set in layoutWidth, layoutHeight
+        int lh = layoutHeight;
+        int lw = layoutWidth;
+        // constant value, and percent size support
+
+        if (isPercentSize(lh))
+            dy = parentHeight;
+        else if (!(isPercentSize(lh) || isSpecialSize(lh)))
+            dy = lh.toPixels();
+        if (isPercentSize(lw))
+            dx = parentWidth;
+        else if (!(isPercentSize(lw) || isSpecialSize(lw)))
+            dx = lw.toPixels();
+        
+        // apply min/max width and height constraints
+        int minw = minWidth;
+        int maxw = maxWidth;
+        int minh = minHeight;
+        int maxh = maxHeight;
+        if (minw != SIZE_UNSPECIFIED && dx < minw)
+            dx = minw;
+        if (minh != SIZE_UNSPECIFIED && dy < minh)
+            dy = minh;
+        if (maxw != SIZE_UNSPECIFIED && dx > maxw)
+            dx = maxw;
+        if (maxh != SIZE_UNSPECIFIED && dy > maxh)
+            dy = maxh;
+        // apply FILL_PARENT
+        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && hasFillWidthChilds() && mWidth < parentWidth)
+            dx = parentWidth;
+        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && hasFillHeightChilds() && mHeight < parentHeight)
+            dy = parentHeight;
+        // apply max parent size constraint
+        
+        _measuredWidth = dx;
+        _measuredHeight = dy;
+    }
+
+
 }
 
 /// Arranges children vertically
@@ -971,6 +1049,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
         @property int maxWidth() { return widget ? widget.maxWidth : 0; }
         @property int minHeight() { return widget ? widget.minHeight : 0; }
         @property int maxHeight() { return widget ? widget.maxHeight : 0; }
+        @property bool heightDependOnWidth() {return widget.heightDependOnWidth();}
         void clear(int col, int row) {
             this.col = col;
             this.row = row;
@@ -1067,6 +1146,17 @@ class TableLayout : WidgetGroupDefaultDrawing {
         protected int _measuredMinHeight;
         protected Widget parent;
 
+        protected bool _heightDependOnWidth;
+        bool heightDependOnWidth() {
+            return _heightDependOnWidth;
+        }
+
+        protected bool _hasFillHeightChilds = false;        
+
+        @property bool hasFillHeightChilds() {
+            return _hasFillHeightChilds;
+        }
+
         void initialize(Widget parent, int cols, int rows, bool layoutWidthFill, bool layoutHeightFill) {
             colCount = cols;
             rowCount = rows;
@@ -1076,6 +1166,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
             _cells.length = cols * rows;
             _rows.length = rows;
             _cols.length = cols;
+            _heightDependOnWidth = false;
             for(int i = 0; i < rows; i++)
                 _rows[i].initialize(i);
             for(int i = 0; i < cols; i++)
@@ -1109,6 +1200,8 @@ class TableLayout : WidgetGroupDefaultDrawing {
                     int index = y * cc + x;
                     Widget child = index < parent.childCount ? parent.child(index) : null;
                     cell(x, y).measureMinSize(child);
+                    if (child && (!_heightDependOnWidth))
+                        _heightDependOnWidth = cell(x, y).heightDependOnWidth();
                 }
             }
 
@@ -1134,14 +1227,18 @@ class TableLayout : WidgetGroupDefaultDrawing {
 
             _measuredMinHeight = totalHeight;
             _measuredMinWidth = totalWidth;
-            //Log.d("             ", parent.id, " w=", totalWidth, " h=", totalHeight);
+            //Log.d("    min size         ", parent.id, " w=", totalWidth, " h=", totalHeight);
             return Point(totalWidth, totalHeight);
         }
         
 
         Point measureSize(Widget parent, int cc, int rc, int pwidth, int pheight, bool layoutWidthFill, bool layoutHeightFill) {
             //Log.d("grid measure ", parent.id, " pw=", pwidth, " ph=", pheight);
-            initialize(parent, cc, rc, layoutWidthFill, layoutHeightFill);
+            //initialize(parent, cc, rc, layoutWidthFill, layoutHeightFill);
+
+            if (_heightDependOnWidth) {
+                
+            }
 
             int deltaW = 0;
             //if (totalWidth < pwidth && liczba_rozszerzkolumn>0) 
@@ -1150,12 +1247,14 @@ class TableLayout : WidgetGroupDefaultDrawing {
             if (_measuredMinWidth < pwidth)  
                 deltaW = (pwidth - _measuredMinWidth) / cc;
 
-            Log.d("delta w ", deltaW);
+            //Log.d("delta w ", deltaW);
             
             int deltaH = 0;
             if (_measuredMinHeight < pheight) 
                 deltaH = (pheight - _measuredMinHeight) / rc;
 
+            //Log.d("deltaH ", deltaH);
+            int test = 0;
             
             TableLayoutCell mCell;
             for (int y = 0; y < rc; y++) {
@@ -1163,13 +1262,14 @@ class TableLayout : WidgetGroupDefaultDrawing {
                     int index = y * cc + x;
                     Widget child = index < parent.childCount ? parent.child(index) : null;
                     mCell = cell(x, y);
-                    Log.d("Minimalna szerokosc: ",mCell.measuredMinWidth); 
-                    Log.d("Minimalna szerokosc + delta (",deltaW,"): ", mCell.measuredMinWidth + (mCell.layoutWidthFill ? deltaW : 0));
-                    Log.d("Minimalna wysokosc: ",mCell.measuredMinHeight); 
-                    Log.d("Minimalna wysokosc + delta (",deltaH,"): ", mCell.measuredMinHeight + (mCell.layoutHeightFill ? deltaH : 0));
+                    /*Log.d("min width: ",mCell.measuredMinWidth); 
+                    Log.d("min width + delta (",deltaW,"): ", mCell.measuredMinWidth + (mCell.layoutWidthFill ? deltaW : 0));
+                    Log.d("min height: ",mCell.measuredMinHeight); 
+                    Log.d("min height + delta (",deltaH,"): ", mCell.measuredMinHeight + (mCell.layoutHeightFill ? deltaH : 0));*/
                     mCell.measureSize(child, mCell.measuredMinWidth + (mCell.layoutWidthFill ? deltaW : 0), mCell.measuredMinHeight + (mCell.layoutHeightFill ? deltaH : 0));
-                    Log.d("Nowa szerokosc: ", mCell.measuredWidth);
-                    Log.d("Nowa wysokosc: ", mCell.measuredHeight);
+                    ////mCell.measureSize(child, mCell.measuredMinWidth + (mCell.layoutWidthFill ? deltaW : 0), mCell.measuredMinHeight);
+                    /*Log.d("new width: ", mCell.measuredWidth);
+                    Log.d("new height: ", mCell.measuredHeight);*/
                     //if (child)
                     //    Log.d("cell ", x, ",", y, " child=", child.id, " measuredWidth=", child.measuredWidth, " minWidth=", child.minWidth);
                 }
@@ -1182,7 +1282,7 @@ class TableLayout : WidgetGroupDefaultDrawing {
                     row(y).rowCellMeasured(cell(x,y));
                 }
                 totalHeight += row(y).measuredSize;
-                //Log.d("Wysokosc wiersza ",y, " wynosi " , row(y).measuredSize);
+                //Log.d("Row height ",y, " wynosi " , row(y).measuredSize);
             }
 
             // calc total col size
@@ -1192,11 +1292,11 @@ class TableLayout : WidgetGroupDefaultDrawing {
                     col(x).colCellMeasured(cell(x,y));
                 }
                 totalWidth += col(x).measuredSize;
-                Log.d("Szerokosc kolumny ",x, " wynosi " , col(x).measuredSize);
+                //Log.d("Szerokosc kolumny ",x, " wynosi " , col(x).measuredSize);
             }
             
             //Log.d("             ", parent.id, " w=", totalWidth, " h=", totalHeight);
-            Log.d("Total size ", totalWidth, " ", totalHeight);
+            //Log.d("Total size ", totalWidth, " ", totalHeight);
             return Point(totalWidth, totalHeight);
         }
 
@@ -1258,9 +1358,9 @@ class TableLayout : WidgetGroupDefaultDrawing {
 
         void layout(Rect rc) {
             // widget sizes can change here
-            measureSize(parent, colCount, rowCount, rc.width, rc.height, layoutWidthFill, layoutHeightFill);
-            layoutRows(rc.height);
-            layoutCols(rc.width);
+            // measureSize(parent, colCount, rowCount, rc.width, rc.height, layoutWidthFill, layoutHeightFill);
+            //layoutRows(rc.height);
+            //layoutCols(rc.width);
             int y0 = 0;
             for (int y = 0; y < rowCount; y++) {
                 int x0 = 0;
@@ -1286,15 +1386,22 @@ class TableLayout : WidgetGroupDefaultDrawing {
     @property int colCount() { return _colCount; }
     @property TableLayout colCount(int count) { if (_colCount != count) requestLayout(); _colCount = count; return this; }
     @property int rowCount() {
-        return (childCount + (_colCount - 1)) / _colCount * _colCount;
+        return (childCount / _colCount) + ((childCount % _colCount == 0 ) ? 0 : 1);
     }
 
     /// set int property value, for ML loaders
     mixin(generatePropertySettersMethodOverride("setIntProperty", "int",
           "colCount"));
 
+    /// set to true if change widget width makes new widget heights
+    override bool heightDependOnWidth() {
+        return _cells.heightDependOnWidth();
+    }
 
     override void measureMinSize() {
+        if (visibility == Visibility.Gone)
+            return;
+        
         int rc = rowCount;
         Point sz = _cells.measureMinSize(this, colCount, rc, layoutWidth == FILL_PARENT, layoutHeight == FILL_PARENT);
         adjustMeasuredMinSize(sz.x, sz.y);
@@ -1302,6 +1409,8 @@ class TableLayout : WidgetGroupDefaultDrawing {
           
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
     override void measureSize(int parentWidth, int parentHeight) {
+        if (visibility == Visibility.Gone)
+            return;
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -1315,6 +1424,9 @@ class TableLayout : WidgetGroupDefaultDrawing {
         int rc = rowCount;
         Point sz = _cells.measureSize(this, colCount, rc, pwidth, pheight, layoutWidth == FILL_PARENT, layoutHeight == FILL_PARENT);
         adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
+        /*Log.d("Parent ", parentHeight);
+        Log.d("sz.x ", sz.y);
+        Log.d("measured ", _measuredHeight);*/
     }
 
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
@@ -1328,6 +1440,59 @@ class TableLayout : WidgetGroupDefaultDrawing {
         applyPadding(rc);
         _cells.layout(rc);
     }
+
+    bool hasFillHeightChilds() {
+        return _cells.hasFillHeightChilds();
+    }
+    
+    protected override void adjustMeasuredSize(int parentWidth, int parentHeight, int mWidth, int mHeight) {
+        if (visibility == Visibility.Gone) {
+            _measuredWidth = _measuredHeight = 0;
+            return;
+        }
+        Rect m = margins;
+        Rect p = padding;
+        // summarize margins, padding, and content size
+        int dx = m.left + m.right + p.left + p.right + mWidth;
+        int dy = m.top + m.bottom + p.top + p.bottom + mHeight;
+        // check for fixed size set in layoutWidth, layoutHeight
+        int lh = layoutHeight;
+        int lw = layoutWidth;
+        // constant value, and percent size support
+
+        if (isPercentSize(lh))
+            dy = parentHeight;
+        else if (!(isPercentSize(lh) || isSpecialSize(lh)))
+            dy = lh.toPixels();
+        if (isPercentSize(lw))
+            dx = parentWidth;
+        else if (!(isPercentSize(lw) || isSpecialSize(lw)))
+            dx = lw.toPixels();
+        
+        // apply min/max width and height constraints
+        int minw = minWidth;
+        int maxw = maxWidth;
+        int minh = minHeight;
+        int maxh = maxHeight;
+        if (minw != SIZE_UNSPECIFIED && dx < minw)
+            dx = minw;
+        if (minh != SIZE_UNSPECIFIED && dy < minh)
+            dy = minh;
+        if (maxw != SIZE_UNSPECIFIED && dx > maxw)
+            dx = maxw;
+        if (maxh != SIZE_UNSPECIFIED && dy > maxh)
+            dy = maxh;
+        // apply FILL_PARENT
+        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && mWidth < parentWidth)
+            dx = parentWidth;
+        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && hasFillHeightChilds() && mHeight < parentHeight)
+            dy = parentHeight;
+        // apply max parent size constraint
+        
+        _measuredWidth = dx;
+        _measuredHeight = dy;
+    }
+    
 
 }
 
