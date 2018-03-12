@@ -345,7 +345,9 @@ class Window : CustomEventTarget {
         _windowOrContentResizeMode = newMode;
         if (_mainWidget) {
             _mainWidget.measureMinSize();
-            adjustWindowOrContentSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
+            _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinWidth);
+            adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
+            ////adjustWindowOrContentSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
         }
     }
 
@@ -598,7 +600,7 @@ class Window : CustomEventTarget {
             _vScrollBar.measureSize(_dx, _dy);
 
         if (_mainWidget !is null) {
-            //_mainWidget.measureMinSize();
+            _mainWidget.measureMinSize();
             _mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
         foreach(p; _popups)
