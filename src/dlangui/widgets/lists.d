@@ -598,6 +598,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
     protected ScrollBar _scrollbar;
     protected int _lastMeasureWidth;
     protected int _lastMeasureHeight;
+    protected bool _menuMode = false;
 
     /// first visible item index
     protected int _firstVisibleItem;
@@ -716,7 +717,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         this(null);
     }
     /// create with ID parameter
-    this(string ID, Orientation orientation = Orientation.Vertical) {
+    this(string ID, Orientation orientation = Orientation.Vertical, bool menuMode = false) {
         super(ID);
         _orientation = orientation;
         focusable = true;
@@ -726,6 +727,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         _scrollbar.visibility = Visibility.Gone;
         _scrollbar.scrollEvent = &onScrollEvent;
         addChild(_scrollbar);
+        _menuMode = menuMode;
     }
 
     protected void setHoverItem(int index) {
@@ -945,12 +947,12 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
     }
 
     /// sets minimum size for the list, override to change
-    Point minimumVisibleContentSize() {
+    /*Point minimumVisibleContentSize() {
         if (_orientation == Orientation.Vertical)
             return Point(measureMinChildrenSize().x, 100);
         else
             return Point(100, measureMinChildrenSize().y);
-    }
+    }*/
 
     protected Point measureMinChildrenSize() {
         // measure children
@@ -961,24 +963,32 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 continue;
 
             w.measureMinSize();
+            w.measureSize(w.measuredMinWidth, w.measuredMinHeight);
             if (_orientation == Orientation.Vertical) {
                 // Vertical
-                if (sz.x < w.measuredMinWidth)
-                    sz.x = w.measuredMinWidth;
-                sz.y += w.measuredMinHeight;
+                if (sz.x < w.measuredWidth)
+                    sz.x = w.measuredWidth;
+                sz.y += w.measuredHeight;
             } else {
                 // Horizontal
-                if (sz.y < w.measuredMinHeight)
-                    sz.y = w.measuredMinHeight;
-                sz.x += w.measuredMinWidth;
+                if (sz.y < w.measuredHeight)
+                    sz.y = w.measuredHeight;
+                sz.x += w.measuredWidth;
             }
         }
         return sz;
     }
 
+    override bool heightDependOnWidth() {
+        return true;
+    }
+    
     override void measureMinSize() {
         if (_orientation == Orientation.Vertical) {
-            adjustMeasuredMinSize(measureMinChildrenSize().x, 100);
+            //adjustMeasuredMinSize(measureMinChildrenSize().x+60, 100);
+            _measuredMinWidth = measureMinChildrenSize().x;
+            _measuredMinHeight = 100;
+            
         }
         else {
             adjustMeasuredMinSize(100, measureMinChildrenSize().y);
@@ -1082,7 +1092,10 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 }
             }
         }
-        adjustMeasuredSize(parentWidth, parentHeight, sz.x + _sbsz.x, sz.y + _sbsz.y);
+        if (_menuMode)
+            adjustMeasuredSize(parentWidth, parentHeight, sz.x + _sbsz.x, sz.y + _sbsz.y);
+        else
+            adjustMeasuredSize(parentWidth, parentHeight, measuredMinWidth + _sbsz.x, measuredMinHeight + _sbsz.y);
 
         if (_scrollbar.visibility == oldScrollbarVisibility) {
             _needLayout = oldNeedLayout;

@@ -495,6 +495,7 @@ class MenuWidgetBase : ListWidget {
         id = "popup_menu";
         styleId = STYLE_POPUP_MENU;
         menuItems = item;
+        _menuMode = true;
     }
 
     /// handle theme change: e.g. reload some themed resources

@@ -104,7 +104,7 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
     }
 
     protected ListWidget createPopup() {
-        ListWidget list = new ListWidget("POPUP_LIST");
+        ListWidget list = new ListWidget("POPUP_LIST", Orientation.Vertical, true);
         list.adapter = _adapter;
         list.selectedItemIndex = _selectedItemIndex;
         return list;
@@ -341,8 +341,9 @@ class ComboBox : ComboBoxBase {
         for(int i = 0; i < _adapter.itemCount; i++) {
             Widget item = _adapter.itemWidget(i);
             item.measureMinSize();
-            if (maxItemWidth < item.measuredMinWidth)
-                maxItemWidth = item.measuredMinWidth;
+            item.measureSize(item.measuredMinWidth, item.measuredMinHeight);
+            if (maxItemWidth < item.measuredWidth)
+                maxItemWidth = item.measuredWidth;
         }
         res.minWidth = maxItemWidth;
         return res;
