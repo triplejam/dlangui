@@ -340,7 +340,6 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
             vsbw = _vscrollbar.measuredWidth;
             _vscrollbar.visibility = oldVisibility;
         }
-
         adjustMeasuredSize(parentWidth, parentHeight, _measuredMinWidth + vsbw, _measuredMinHeight + hsbh);
     }
 
@@ -495,8 +494,12 @@ class ScrollWidget :  ScrollWidgetBase {
         Point sz;
         if (_contentWidget) {
             _contentWidget.measureMinSize();
-            sz.x = _contentWidget.measuredMinWidth;
-            sz.y = _contentWidget.measuredMinHeight;
+            _contentWidget.measureSize(_contentWidget.measuredMinWidth, _contentWidget.measuredMinHeight);
+            //sz.x = _contentWidget.measuredMinWidth;
+            //sz.y = _contentWidget.measuredMinHeight;
+            sz.x = _contentWidget.measuredWidth;
+            sz.y = _contentWidget.measuredHeight;
+            
         }
         _fullScrollableArea.right = sz.x;
         _fullScrollableArea.bottom = sz.y;

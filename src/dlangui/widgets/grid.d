@@ -395,6 +395,14 @@ class GridWidgetBase : ScrollWidgetBase, GridModelAdapter, MenuItemActionHandler
     protected DrawableRef _cellRowHeaderBackgroundDrawable;
     protected DrawableRef _cellRowHeaderSelectedBackgroundDrawable;
 
+    protected int _startWidth = 0;
+    protected int _startHeight = 0;
+    protected bool _firstMeasure = true;
+
+    void resetStartSize() {
+        _firstMeasure = true;
+    }
+
     /// row header column count
     @property int headerCols() { return _headerCols; }
     @property GridWidgetBase headerCols(int c) {
@@ -1613,6 +1621,7 @@ class GridWidgetBase : ScrollWidgetBase, GridModelAdapter, MenuItemActionHandler
             return;
         }
 
+        if (_firstMeasure) {
         Point sz;
         int firstVisibleCol = (showRowHeaders) ? 0 : _headerCols;
         for (int i = firstVisibleCol ; i < min(_cols, _minVisibleCols + firstVisibleCol) ; i++)
@@ -1625,10 +1634,18 @@ class GridWidgetBase : ScrollWidgetBase, GridModelAdapter, MenuItemActionHandler
 
         if (_rows<_minVisibleRows)
             sz.y += (_minVisibleRows - _rows) * _rowHeights[_rows-1];
-        
-        adjustMeasuredMinSize(sz.x, sz.y);
+
+        // do not adjust here
+        _measuredMinWidth = sz.x;
+        _measuredMinHeight = sz.y;
+        _startWidth = sz.x;
+        _startHeight = sz.y;
+        _firstMeasure = false;
+        }
+        _measuredMinWidth = _startWidth;
+        _measuredMinHeight = _startHeight;
     }
-    
+
     override protected void drawClient(DrawBuf buf) {
         if (!_cols || !_rows)
             return; // no cells
@@ -1747,10 +1764,12 @@ class GridWidgetBase : ScrollWidgetBase, GridModelAdapter, MenuItemActionHandler
     void fillColumnWidth(int colIndex) {
         int w = _clientRect.width;
         int totalw = 0;
-        for (int i = 0; i < _cols; i++)
-            totalw += _colWidths[i];
+        for (int i = 0; i < _cols; i++) {
+            if (i != colIndex + _headerCols)
+                totalw += _colWidths[i];
+        }
         if (w > totalw)
-            _colWidths[colIndex + _headerCols] += w - totalw;
+            _colWidths[colIndex + _headerCols] = w - (totalw);
         _changedSize = true;
         invalidate();
     }
