@@ -2601,6 +2601,7 @@ class EditBox : EditWidgetBase {
     /// Set _needRewrap to true;
     override void wordWrapRefresh()
     {
+        _extendRightScrollBound=!_wordWrap;
         _needRewrap = true;
     }
     
@@ -2624,6 +2625,10 @@ class EditBox : EditWidgetBase {
     }
 
     override protected void updateMaxLineWidth() {
+        if (_wordWrap) {
+            _maxLineWidth = clientRect.width;
+            return;
+        }
         // find max line width. TODO: optimize!!!
         int maxw;
         int[] buf;
