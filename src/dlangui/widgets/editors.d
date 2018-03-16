@@ -500,22 +500,16 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     protected LineSpan[] _spanCache;
     
     /// Finds good visual wrapping point for string
-    int findWrapPoint(dstring text)
-    {
+    int findWrapPoint(dstring text) {
         int maxWidth = _clientRect.width;
         int wrapPoint = 0;
-        while (true)
-        {
+        while (true) {
             if (measureWrappedText(text[0 .. wrapPoint]) < maxWidth)
-            {
                 wrapPoint++;
-            }
             else
-            {
-                return wrapPoint;
-            }
+                return wrapPoint-1;
         }
-     }
+    }
     
     /// Calls measureText for word wrap
     int measureWrappedText(dstring text)
