@@ -980,12 +980,11 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
     }
 
     override bool heightDependOnWidth() {
-        return true;
+        return false;
     }
     
     override void measureMinSize() {
         if (_orientation == Orientation.Vertical) {
-            //adjustMeasuredMinSize(measureMinChildrenSize().x+60, 100);
             _measuredMinWidth = measureMinChildrenSize().x;
             _measuredMinHeight = 100;
             

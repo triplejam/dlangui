@@ -129,7 +129,6 @@ class Dialog : VerticalLayout {
         _buttonActions = actions;
         LinearLayout res = new HorizontalLayout("buttons");
         res.layoutWidth(FILL_PARENT);
-        res.layoutWeight = 0;
         for (int i = 0; i < actions.length; i++) {
             if (splitBeforeIndex == i)
                 res.addChild(new HSpacer());

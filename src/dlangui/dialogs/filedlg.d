@@ -558,7 +558,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             adapter.add(btn);
         }
         res.ownAdapter = adapter;
-        res.layoutWidth(WRAP_CONTENT).layoutHeight(FILL_PARENT).layoutWeight(0);
+        res.layoutHeight(FILL_PARENT);
         res.itemClick = delegate(Widget source, int itemIndex) {
             openDirectory(_roots[itemIndex].path, null);
             res.selectItem(-1);
@@ -732,6 +732,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
         leftPanel = createRootsList();
         leftPanel.minWidth(WIDGET_STYLE_CONSOLE ? 7 : 40.pointsToPixels);
+        leftPanel.layoutHeight(FILL_PARENT);
 
         rightPanel = new VerticalLayout("main");
         rightPanel.layoutHeight(FILL_PARENT).layoutWidth(FILL_PARENT);
@@ -742,7 +743,6 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
         _edPath = new FilePathPanel("path");
         _edPath.layoutWidth(FILL_PARENT);
-        _edPath.layoutWeight = 0;
         _edPath.onPathSelectionListener = &onPathSelected;
         HorizontalLayout fnlayout = new HorizontalLayout();
         fnlayout.layoutWidth(FILL_PARENT);
@@ -753,7 +753,6 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             _edFilename.visibility = Visibility.Gone;
         }
 
-        //_edFilename.layoutWeight = 0;
         fnlayout.addChild(_edFilename);
         if (_filters.length) {
             dstring[] filterLabels;
@@ -767,7 +766,6 @@ class FileDialog : Dialog, CustomGridCellAdapter {
                 return true;
             };
             _cbFilters.layoutWidth(WRAP_CONTENT);
-            _cbFilters.layoutWeight(0);
             //_cbFilters.backgroundColor = 0xFFC0FF;
             fnlayout.addChild(_cbFilters);
             //fnlayout.backgroundColor = 0xFFFFC0;
@@ -1169,10 +1167,10 @@ class FileNameEditLine : HorizontalLayout {
         _caption = UIString.fromId("TITLE_OPEN_FILE"c).value;
         _edFileName = new EditLine("FileNameEditLine_edFileName");
         _edFileName.minWidth(WIDGET_STYLE_CONSOLE ? 16 : 200);
+        _edFileName.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
         _edFileName.layoutWidth = FILL_PARENT;
         _btn = new Button("FileNameEditLine_btnFile", "..."d);
         _btn.styleId = STYLE_BUTTON_NOMARGINS;
-        _btn.layoutWeight = 0;
         _btn.click = delegate(Widget src) {
             FileDialog dlg = new FileDialog(UIString.fromRaw(_caption), window, null, _fileDialogFlags);
             foreach(key, value; _filetypeIcons)
