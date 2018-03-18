@@ -228,7 +228,6 @@ class LayoutItems {
                     }*/
                 }
                 
-
                 usedSpace += item._measuredSize;
             }
 
@@ -276,23 +275,27 @@ class LayoutItems {
             // maybe we need add step sum to not exceed extraSpace due to rounds
             for (int i = 0; i < _count; i++) {
                 LayoutItem * item = &_list[i];
+
+                int sizeToMeasure = item.measuredMinSize;
+                if (item.heightDependsOnWidth)
+                    sizeToMeasure = item.measuredSize;
                 
                 if (_orientation == Orientation.Horizontal) {
                     if (_hasPercentSizeWidget && i == _percenSizeWidgetIndex ) {
-                        item.measureSize(item.measuredMinSize + extraSpaceForPercentSize, parentHeight);
+                        item.measureSize(sizeToMeasure + extraSpaceForPercentSize, parentHeight);
                     }
                     else if (item.fillParent)
-                        item.measureSize(item.measuredMinSize + extraSpaceStep * item.weight, parentHeight);
+                        item.measureSize(sizeToMeasure + extraSpaceStep * item.weight, parentHeight);
                     else
-                        item.measureSize(item.measuredMinSize, parentHeight);
+                        item.measureSize(sizeToMeasure, parentHeight);
                 }
                 else {
                     if (_hasPercentSizeWidget && i == _percenSizeWidgetIndex )
-                        item.measureSize(parentWidth, item.measuredMinSize + extraSpaceForPercentSize);
+                        item.measureSize(parentWidth, sizeToMeasure + extraSpaceForPercentSize);
                     else if (item.fillParent)
-                        item.measureSize(parentWidth, item.measuredMinSize + extraSpaceStep * item.weight);
+                        item.measureSize(parentWidth, sizeToMeasure + extraSpaceStep * item.weight);
                     else
-                        item.measureSize(parentWidth, item.measuredMinSize);
+                        item.measureSize(parentWidth, sizeToMeasure);
                 }
                 _totalSize += item._measuredSize;
 
@@ -300,7 +303,6 @@ class LayoutItems {
                     _maxSecondarySize = item._secondarySize;
             }
         }
-        
         return _orientation == Orientation.Horizontal ? Point(_totalSize, _maxSecondarySize) : Point(_maxSecondarySize, _totalSize);
     }
 
@@ -322,9 +324,10 @@ class LayoutItems {
 
     void layout(Rect rc) {
         // measure again - available area could be changed
-        if (_measureParentSize.x != rc.width || _measureParentSize.y != rc.height)
+        if (_measureParentSize.x != rc.width || _measureParentSize.y != rc.height) {
             measureSize(rc.width, rc.height);
-
+        }
+        
         int mainSizeDelta = 0; // used in alignment
 
         // main size alignment
