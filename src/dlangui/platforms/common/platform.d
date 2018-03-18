@@ -347,7 +347,6 @@ class Window : CustomEventTarget {
             _mainWidget.measureMinSize();
             _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinWidth);
             adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
-            ////adjustWindowOrContentSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
         }
     }
 
