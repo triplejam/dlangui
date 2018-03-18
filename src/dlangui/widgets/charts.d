@@ -288,7 +288,11 @@ class SimpleBarChart : Widget {
         return _measuredTextToSetDescLineSize;
     }
 
-    override void measure(int parentWidth, int parentHeight) {
+    override bool heightDependOnWidth() {
+        return true;
+    }
+    
+    override void measureSize(int parentWidth, int parentHeight) {
         FontRef font = font();
 
         int mWidth = minWidth;
@@ -359,7 +363,7 @@ class SimpleBarChart : Widget {
             chartW = _titleSize.y;
 
         chartH = _axisX.maxDescriptionSize.y + _axisX.thickness + _axisX.segmentTagLength + _axisY.zeroValueDist + _axisY.lengthFromZeroToArrow + ((_showTitle) ? _titleSize.y + _marginAfterTitle : 0) + _axisY.arrowSize;
-        measuredContent(parentWidth, parentHeight, chartW, chartH);
+        adjustMeasuredSize(parentWidth, parentHeight, chartW, chartH);
     }
 
 
