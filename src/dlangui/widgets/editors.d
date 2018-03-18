@@ -512,7 +512,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     void wrapContent() {
         _span = [];
-        if (_wordWrap) {
+        if (_wordWrap && _clientRect.width > 0) {
             for(int i = 0 ; i< content.lines.length ; i++) {
                 wrapLine(content.lines[i], i);
             }
@@ -2614,8 +2614,7 @@ class EditBox : EditWidgetBase {
     override void wordWrapRefresh()
     {
         _extendRightScrollBound=!_wordWrap;
-        //_needRewrap = true;
-        wrapContent();
+        _needRewrap = true;
     }
     
     override @property int fontSize() const { return super.fontSize(); }
