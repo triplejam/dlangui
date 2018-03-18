@@ -516,7 +516,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         }
         else
             for(int i = 0 ; i < content.lines.length ; i++) {
-                 if (content.lines[i].length >0 )
+                 if (content.lines[i].length > 0)
                     _span ~= LineSpan(i, 0, cast(int)content.lines[i].length-1, content.lines[i]);
                 else
                     _span ~= LineSpan(i, 0, 0, ""d);
@@ -1991,7 +1991,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _selectionRange.start.line = 0;
         _selectionRange.start.pos = 0;
         _selectionRange.end.line = cast(int)_span.length -1;
-        _selectionRange.end.pos = cast(int)_span[_span.length -1].content.length - 1;
+        _selectionRange.end.pos = cast(int)_span[_span.length -1].content.length;
         _caretPos = _selectionRange.end;
         requestActionsUpdate();
     }
