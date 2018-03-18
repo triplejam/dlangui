@@ -980,17 +980,50 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
     }
 
     override bool heightDependOnWidth() {
-        return false;
+        return true;
     }
+
+    private int _minWidthWithoutAdjust = 0;
+    private int _minHeightWithoutAdjust = 0;
     
     override void measureMinSize() {
         if (_orientation == Orientation.Vertical) {
-            _measuredMinWidth = measureMinChildrenSize().x;
-            _measuredMinHeight = 100;
-            
+
+            if (itemCount == 0) {
+                _measuredMinWidth = 100;
+                _measuredMinHeight = 100;
+            }
+            else {
+
+                // comented alghoritm that always add space for scroll
+                /*
+                bool oldNeedLayout = _needLayout;
+                Visibility oldScrollbarVisibility = _scrollbar.visibility;
+
+                _scrollbar.visibility = Visibility.Visible;
+                _scrollbar.measureSize(200, 200);
+
+                int sbsize = _orientation == Orientation.Vertical ? _scrollbar.measuredWidth : _scrollbar.measuredHeight;
+
+                //_minWidthWithoutAdjust = measureMinChildrenSize().x + sbsize;
+                */
+                
+                _minWidthWithoutAdjust = measureMinChildrenSize().x;
+                _minHeightWithoutAdjust = 100;
+                adjustMeasuredMinSize(_minWidthWithoutAdjust, _minHeightWithoutAdjust);
+                //Log.d("min size list: ", _measuredMinWidth, ", ", _measuredMinHeight);
+
+                /*if (_scrollbar.visibility == oldScrollbarVisibility) {
+                    _needLayout = oldNeedLayout;
+                    _scrollbar.cancelLayout();
+                }*/
+            }
         }
         else {
-            adjustMeasuredMinSize(100, measureMinChildrenSize().y);
+            _minWidthWithoutAdjust = 100;
+            _minHeightWithoutAdjust = measureMinChildrenSize().y;
+            
+            adjustMeasuredMinSize(100, _minHeightWithoutAdjust);
         }
     }
 
@@ -1047,6 +1080,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
                 sz.x += w.measuredWidth;
             }
         }
+
         _needScrollbar = false;
         if (_orientation == Orientation.Vertical) {
             if (pheight != SIZE_UNSPECIFIED && sz.y > pheight) {
@@ -1094,7 +1128,8 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         if (_menuMode)
             adjustMeasuredSize(parentWidth, parentHeight, sz.x + _sbsz.x, sz.y + _sbsz.y);
         else
-            adjustMeasuredSize(parentWidth, parentHeight, measuredMinWidth + _sbsz.x, measuredMinHeight + _sbsz.y);
+            //adjustMeasuredSize(parentWidth, parentHeight, _minWidthWithoutAdjust, _minHeightWithoutAdjust); // uncoment to use always add space for scrollbar
+            adjustMeasuredSize(parentWidth, parentHeight, _minWidthWithoutAdjust + _sbsz.x, _minHeightWithoutAdjust + _sbsz.y);
 
         if (_scrollbar.visibility == oldScrollbarVisibility) {
             _needLayout = oldNeedLayout;
@@ -1181,9 +1216,10 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         if (_itemRects.length < itemCount)
             _itemRects.length = itemCount;
 
-        // measure again if client size has been changed
-        if (_lastMeasureWidth != rc.width || _lastMeasureHeight != rc.height)
+        // measure again to remove scrollbar in menu mode
+        if (_menuMode && (_lastMeasureWidth != rc.width || _lastMeasureHeight != rc.height)) {
             measureSize(parentrc.width, parentrc.height);
+        }
 
         // hide scrollbar or update rc for scrollbar
         Rect sbrect = rc;
