@@ -464,7 +464,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
     void autofitGrid() {
         _fileList.autoFitColumnWidths();
-        //_fileList.setColWidth(1, 0);
+        // _fileList.setColWidth(1, 0);
         _fileList.fillColumnWidth(1);
     }
 
@@ -981,7 +981,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
         }
     }
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
 
@@ -1005,7 +1005,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
         bool exceeded = false;
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
-            item.measure(pwidth, pheight);
+            item.measureSize(pwidth, pheight);
             if (sz.y < item.measuredHeight)
                 sz.y = item.measuredHeight;
             if (sz.x + item.measuredWidth > pwidth) {
@@ -1014,7 +1014,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
             if (!exceeded || i == 0) // at least one item must be measured
                 sz.x += item.measuredWidth;
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
     }
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
@@ -1040,7 +1040,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
             item.visibility = Visibility.Visible;
-            item.measure(rc.width, rc.height);
+            item.measureSize(rc.width, rc.height);
             if (totalw + item.measuredWidth > rc.width) {
                 exceeded = true;
             }
