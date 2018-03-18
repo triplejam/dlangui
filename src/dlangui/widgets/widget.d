@@ -1442,9 +1442,9 @@ public:
         if (maxh != SIZE_UNSPECIFIED && dy > maxh)
             dy = maxh;
         // apply FILL_PARENT
-        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && mWidth < parentWidth)
+        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && dx < parentWidth)
             dx = parentWidth;
-        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && mHeight < parentHeight)
+        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && dy < parentHeight)
             dy = parentHeight;
         // apply max parent size constraint
         
