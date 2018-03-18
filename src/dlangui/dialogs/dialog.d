@@ -135,6 +135,7 @@ class Dialog : VerticalLayout {
             const Action a = actions[i];
             string id = "btn" ~ to!string(a.id);
             ImageTextButton btn = new ImageTextButton(id, a.iconId, a.label);
+            btn.layoutHeight(FILL_PARENT);
             if (defaultActionIndex == i) {
                 btn.setState(State.Default);
                 _defaultButton = btn;
