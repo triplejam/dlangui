@@ -747,8 +747,10 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         HorizontalLayout fnlayout = new HorizontalLayout();
         fnlayout.layoutWidth(FILL_PARENT);
         _edFilename = new EditLine("filename");
+        
         _edFilename.layoutWidth(FILL_PARENT);
         _edFilename.setDefaultPopupMenu();
+        _edFilename.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
         if (_flags & FileDialogFlag.SelectDirectory) {
             _edFilename.visibility = Visibility.Gone;
         }
@@ -1164,11 +1166,12 @@ class FileNameEditLine : HorizontalLayout {
 
     this(string ID = null) {
         super(ID);
+        layoutWidth(FILL_PARENT);
         _caption = UIString.fromId("TITLE_OPEN_FILE"c).value;
         _edFileName = new EditLine("FileNameEditLine_edFileName");
         _edFileName.minWidth(WIDGET_STYLE_CONSOLE ? 16 : 200);
-        _edFileName.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
-        _edFileName.layoutWidth = FILL_PARENT;
+        _edFileName.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
+        _edFileName.layoutWidth(FILL_PARENT);
         _btn = new Button("FileNameEditLine_btnFile", "..."d);
         _btn.styleId = STYLE_BUTTON_NOMARGINS;
         _btn.click = delegate(Widget src) {
