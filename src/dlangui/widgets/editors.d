@@ -426,9 +426,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     
     /// Divides up a string for word wrapping, sets info in _span
     void wrapLine(dstring str, int lineNumber) {
+        if (!str.length) {
+            _span ~= LineSpan(lineNumber, -1, -1, ""d);
+            //Log.d("span0  ", LineSpan(lineNumber, -1, -1, ""d));
+            return;
+        }
+
         FontRef font = font();
         dstring[] words = explode(str, splitChars);
-        int curLineLength = 0;
         dchar[] buildingStr;
         int curLineWidth = 0;
         int maxWidth = _clientRect.width;
@@ -443,7 +448,6 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 {
                     _span ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1 , to!dstring(buildingStr));
                     //Log.d("span1  ", LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1, to!dstring(buildingStr)));
-                    curLineLength = 0;
                     curLineWidth = 0;
                     firstCharIndex = firstCharIndex + cast(int)buildingStr.length;
                     buildingStr = [];
@@ -465,7 +469,6 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             buildingStr ~= word;
             if (word.length)
                 lastCharIndex += word.length-1;
-            curLineLength += to!int(word.length);
             curLineWidth += measureWrappedText(word);
         }
         
@@ -519,7 +522,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                  if (content.lines[i].length > 0)
                     _span ~= LineSpan(i, 0, cast(int)content.lines[i].length-1, content.lines[i]);
                 else
-                    _span ~= LineSpan(i, 0, 0, ""d);
+                    _span ~= LineSpan(i, -1, -1, ""d);
             }
         correctCaretPos();
     }
@@ -1152,8 +1155,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
         LineSpan lsp = _span[spanTextPos.line];
         // Log.d("span text pos ", spanTextPos);
-        // Log.d("content text pos ", TextPosition(lsp.contentLine, lsp.firstCharIndex + spanTextPos.pos));
-        return TextPosition(lsp.contentLine, lsp.firstCharIndex + spanTextPos.pos);
+        // Log.d("content text pos ", TextPosition(lsp.contentLine, lsp.firstCharIndex < 0 ? spanTextPos.pos : spanTextPos.pos + lsp.firstCharIndex));
+        return TextPosition(lsp.contentLine, lsp.firstCharIndex < 0 ? spanTextPos.pos : spanTextPos.pos + lsp.firstCharIndex);
     }
 
     /// Translate span text range to content text range
