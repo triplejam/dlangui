@@ -154,7 +154,7 @@ class TextWidget : Widget {
         }
     }
 
-    private @property void widthForMinContentSize(int newWidth) {
+    @property void widthForMinContentSize(int newWidth) {
         if (_widthForMinContentSize != newWidth) {
             _widthForMinContentSize = newWidth;
             if (maxLines != 1) {
@@ -186,7 +186,7 @@ class TextWidget : Widget {
         if (maxLines == 1) {
             sz = font.textSize(text, w, 4, 0, textFlags);
         } else {
-            sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
+            sz = font.measureMultilineText(text, 2/*maxLines*/, w, 4, 0, textFlags);
         }
 
         _measuredMinContentWidth = sz.x;

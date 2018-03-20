@@ -57,6 +57,7 @@ class MessageBox : Dialog {
         TextWidget msg = new MultilineTextWidget("msg", _message);
         padding(Rect(10, 10, 10, 10));
         msg.padding(Rect(10, 10, 10, 10));
+        msg.widthForMinContentSize(500.pointsToPixels);
         addChild(msg);
         addChild(createButtonsPanel(_actions, _defaultButtonIndex, 0));
     }
