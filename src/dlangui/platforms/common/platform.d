@@ -466,6 +466,17 @@ class Window : CustomEventTarget {
     /// horizontal scrollbar control
     protected ScrollBar _hScrollBar = null;
 
+    /// remeasure min window or content size, for example after add a lot of widgets to main window layout (minimal size can change).
+    void remeasureMinWindowOrContentSize() {
+        _mainWidget.measureMinSize();
+        _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
+
+        if (flags & WindowFlag.MeasureSize)
+            resizeWindow(Point(_mainWidget.measuredWidth, _mainWidget.measuredHeight));
+
+        adjustWindowOrContentSize(_mainWidget.measuredWidth, _mainWidget.measuredHeight);
+    }
+    
     /// Sets the minimal content size and adjust window or content should be called from window show
     void adjustWindowOrContentSize(int minContentWidth, int minContentHeight) {
         _minContentWidth = minContentWidth;
