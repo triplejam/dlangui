@@ -761,6 +761,14 @@ class FrameLayout : WidgetGroupDefaultDrawing {
         super(ID);
     }
 
+    override bool heightDependOnWidth() {
+        for (int i = 0; i < _children.count; i++) {
+            if (_children.get(i).heightDependOnWidth())
+                return true;
+        }
+        return false;
+    }
+    
     override void measureMinSize() {
         // measure children
         Point sz;
