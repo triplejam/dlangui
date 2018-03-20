@@ -444,6 +444,10 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         if (executableFilterSelected()) {
             attrFilter |= AttrFilter.executable;
         }
+
+        if (_flags & FileDialogFlag.SelectDirectory)
+            attrFilter = (showHiddenFiles ? AttrFilter.dirs | AttrFilter.hidden : AttrFilter.dirs) | AttrFilter.parent;
+
         try {
             _entries = listDirectory(dir, attrFilter, selectedFilter());
         } catch(Exception e) {
@@ -751,9 +755,6 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         _edFilename.layoutWidth(FILL_PARENT);
         _edFilename.setDefaultPopupMenu();
         _edFilename.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
-        if (_flags & FileDialogFlag.SelectDirectory) {
-            _edFilename.visibility = Visibility.Gone;
-        }
 
         fnlayout.addChild(_edFilename);
         if (_filters.length) {
@@ -772,6 +773,10 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             fnlayout.addChild(_cbFilters);
             //fnlayout.backgroundColor = 0xFFFFC0;
         }
+        if (_flags & FileDialogFlag.SelectDirectory) {
+            fnlayout.visibility = Visibility.Gone;
+        }
+        
 
         _fileList = new StringGridWidget("files");
         _fileList.styleId = STYLE_FILE_DIALOG_GRID;
