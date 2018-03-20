@@ -742,7 +742,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         content.addChild(rightPanel);
 
         _edPath = new FilePathPanel("path");
-        _edPath.layoutWidth(FILL_PARENT);
+        _edPath.layoutWidth(WRAP_CONTENT);
         _edPath.onPathSelectionListener = &onPathSelected;
         HorizontalLayout fnlayout = new HorizontalLayout();
         fnlayout.layoutWidth(FILL_PARENT);
@@ -980,6 +980,23 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
             itemPath = parentDir(itemPath);
         }
     }
+
+    override bool heightDependOnWidth() {
+        return true;
+    }
+
+    override void measureMinSize() {
+        int reservedForEmptySpace = 4.pointsToPixels;
+
+        if (childCount > 0) {
+            Widget item = child(0);
+            item.measureMinSize();
+            adjustMeasuredMinSize(item.measuredMinWidth + reservedForEmptySpace, item.measuredMinHeight);
+        }
+        else
+            adjustMeasuredMinSize(reservedForEmptySpace + 100, 1);
+    }
+    
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
     override void measureSize(int parentWidth, int parentHeight) {
         Rect m = margins;
