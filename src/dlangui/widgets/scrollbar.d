@@ -388,13 +388,13 @@ class ScrollBar : AbstractSlider, OnClickHandler {
         _pageDown.click = &onClick;
     }
 
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         Point sz;
-        _btnBack.measure(parentWidth, parentHeight);
-        _btnForward.measure(parentWidth, parentHeight);
-        _indicator.measure(parentWidth, parentHeight);
-        _pageUp.measure(parentWidth, parentHeight);
-        _pageDown.measure(parentWidth, parentHeight);
+        _btnBack.measureSize(parentWidth, parentHeight);
+        _btnForward.measureSize(parentWidth, parentHeight);
+        _indicator.measureSize(parentWidth, parentHeight);
+        _pageUp.measureSize(parentWidth, parentHeight);
+        _pageDown.measureSize(parentWidth, parentHeight);
         _btnSize = _btnBack.measuredWidth;
         _minIndicatorSize = _orientation == Orientation.Vertical ? _indicator.measuredHeight : _indicator.measuredWidth;
         if (_btnSize < _minIndicatorSize)
@@ -418,7 +418,7 @@ class ScrollBar : AbstractSlider, OnClickHandler {
             sz.y = _btnSize;
             sz.x = _btnSize * 5; // min height
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
     }
 
     override protected void onPositionChanged() {
@@ -818,11 +818,11 @@ class SliderWidget : AbstractSlider, OnClickHandler {
         _pageDown.click = &onClick;
     }
 
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         Point sz;
-        _indicator.measure(parentWidth, parentHeight);
-        _pageUp.measure(parentWidth, parentHeight);
-        _pageDown.measure(parentWidth, parentHeight);
+        _indicator.measureSize(parentWidth, parentHeight);
+        _pageUp.measureSize(parentWidth, parentHeight);
+        _pageDown.measureSize(parentWidth, parentHeight);
         _minIndicatorSize = _orientation == Orientation.Vertical ? _indicator.measuredHeight : _indicator.measuredWidth;
         _btnSize = _minIndicatorSize;
         if (_btnSize < _minIndicatorSize)
@@ -840,7 +840,7 @@ class SliderWidget : AbstractSlider, OnClickHandler {
             sz.y = _btnSize;
             sz.x = _btnSize * 5; // min height
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
     }
 
     override protected void onPositionChanged() {

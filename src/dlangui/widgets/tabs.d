@@ -474,6 +474,35 @@ class TabControl : WidgetGroupDefaultDrawing {
         return this;
     }
 
+    /// remove tab
+    TabControl removeTab(int index) {
+        string nextId;
+        if (index == _items.indexById(_selectedTabId)) {
+            // current tab is being closed: remember next tab id
+            int nextIndex = getNextItemIndex(1);
+            if (nextIndex < 0)
+                nextIndex = getNextItemIndex(-1);
+            if (nextIndex >= 0)
+                nextId = _items[nextIndex].id;
+        }
+        if (index >= 0) {
+            Widget w = _children.remove(index + 1);
+            if (w)
+                destroy(w);
+            _items.remove(index);
+            if (index == _items.indexById(_selectedTabId))
+                _selectedTabId = null;
+            requestLayout();
+        }
+        if (nextId) {
+            index = _items.indexById(nextId);
+            if (index >= 0) {
+                selectTab(index, true);
+            }
+        }
+        return this;
+    }
+
     /// change name of tab
     void renameTab(string ID, dstring name) {
         int index = _items.indexById(id);
@@ -609,7 +638,7 @@ class TabControl : WidgetGroupDefaultDrawing {
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         //Log.d("tabControl.measure enter");
         Rect m = margins;
         Rect p = padding;
@@ -623,7 +652,7 @@ class TabControl : WidgetGroupDefaultDrawing {
         // measure children
         Point sz;
         if (_moreButton.visibility == Visibility.Visible) {
-            _moreButton.measure(pwidth, pheight);
+            _moreButton.measureSize(pwidth, pheight);
             sz.x = _moreButton.measuredWidth;
             sz.y = _moreButton.measuredHeight;
         }
@@ -631,14 +660,14 @@ class TabControl : WidgetGroupDefaultDrawing {
         for (int i = 1; i < _children.count; i++) {
             Widget tab = _children.get(i);
             tab.visibility = Visibility.Visible;
-            tab.measure(pwidth, pheight);
+            tab.measureSize(pwidth, pheight);
             if (sz.y < tab.measuredHeight)
                 sz.y = tab.measuredHeight;
             if (sz.x + tab.measuredWidth > pwidth)
                 break;
             sz.x += tab.measuredWidth - _buttonOverlap;
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
         //Log.d("tabControl.measure exit");
     }
 
@@ -667,7 +696,7 @@ class TabControl : WidgetGroupDefaultDrawing {
         for (int i = 0; i < sorted.length; i++) {
             TabItemWidget widget = sorted[i];
             widget.visibility = Visibility.Visible;
-            widget.measure(rc.width, rc.height);
+            widget.measureSize(rc.width, rc.height);
             if (w + widget.measuredWidth < maxw) {
                 w += widget.measuredWidth - _buttonOverlap;
             } else {
@@ -814,6 +843,17 @@ class TabHost : FrameLayout, TabHandler {
         return this;
     }
 
+    TabHost removeTab(int index) {
+        assert(_tabControl !is null, "No TabControl set for TabHost");
+        Widget child = removeChild(index);
+        if (child !is null) {
+            destroy(child);
+        }
+        _tabControl.removeTab(index);
+        requestLayout();
+        return this;
+    }
+
     /// add new tab by id and label string
     TabHost addTab(Widget widget, dstring label, string iconId = null, bool enableCloseButton = false, dstring tooltipText = null) {
         assert(_tabControl !is null, "No TabControl set for TabHost");
@@ -942,6 +982,13 @@ class TabWidget : VerticalLayout, TabHandler, TabCloseHandler {
     /// remove tab by id
     TabWidget removeTab(string id) {
         _tabHost.removeTab(id);
+        requestLayout();
+        return this;
+    }
+
+    /// remove tab by index
+    TabWidget removeTab(int index) {
+        _tabHost.removeTab(index);
         requestLayout();
         return this;
     }

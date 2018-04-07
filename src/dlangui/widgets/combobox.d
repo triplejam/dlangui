@@ -104,7 +104,7 @@ class ComboBoxBase : HorizontalLayout, OnClickHandler {
     }
 
     protected ListWidget createPopup() {
-        ListWidget list = new ListWidget("POPUP_LIST");
+        ListWidget list = new ListWidget("POPUP_LIST", Orientation.Vertical, true);
         list.adapter = _adapter;
         list.selectedItemIndex = _selectedItemIndex;
         return list;
@@ -335,12 +335,13 @@ class ComboBox : ComboBoxBase {
         TextWidget res = new TextWidget("COMBO_BOX_BODY");
         res.styleId = STYLE_COMBO_BOX_BODY;
         res.clickable = true;
-        res.layoutWidth = FILL_PARENT;
+        res.layoutWidth = WRAP_CONTENT;// FILL_PARENT;
         res.layoutHeight = WRAP_CONTENT;
         int maxItemWidth = 0;
         for(int i = 0; i < _adapter.itemCount; i++) {
             Widget item = _adapter.itemWidget(i);
-            item.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
+            item.measureMinSize();
+            item.measureSize(item.measuredMinWidth, item.measuredMinHeight);
             if (maxItemWidth < item.measuredWidth)
                 maxItemWidth = item.measuredWidth;
         }
@@ -454,14 +455,14 @@ class IconTextComboBox : ComboBoxBase {
         TextWidget res = new TextWidget("COMBO_BOX_BODY");
         res.styleId = STYLE_COMBO_BOX_BODY;
         res.clickable = true;
-        res.layoutWidth = FILL_PARENT;
+        res.layoutWidth = WRAP_CONTENT;//FILL_PARENT;
         res.layoutHeight = WRAP_CONTENT;
         int maxItemWidth = 0;
         for(int i = 0; i < _adapter.itemCount; i++) {
             Widget item = _adapter.itemWidget(i);
-            item.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            if (maxItemWidth < item.measuredWidth)
-                maxItemWidth = item.measuredWidth;
+            item.measureMinSize();
+            if (maxItemWidth < item.measuredMinWidth)
+                maxItemWidth = item.measuredMinWidth;
         }
         res.minWidth = maxItemWidth;
         return res;
@@ -551,7 +552,7 @@ class ComboEdit : ComboBox {
 
     override protected Widget createSelectedItemWidget() {
         EditLine res = new EditLine("COMBOBOX_BODY");
-        res.layoutWidth = FILL_PARENT;
+        res.layoutWidth = WRAP_CONTENT;// FILL_PARENT;
         res.layoutHeight = WRAP_CONTENT;
         res.readOnly = false;
         _edit = res;

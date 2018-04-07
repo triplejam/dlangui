@@ -324,33 +324,33 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
     void measureSubitems(ref int maxLabelWidth, ref int maxHeight, ref int maxIconWidth, ref int maxAccelWidth) {
         if (_item.type == MenuItemType.Separator)
             return;
-        _label.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-        if (maxLabelWidth < _label.measuredWidth)
-            maxLabelWidth = _label.measuredWidth;
-        if (maxHeight < _label.measuredHeight)
-            maxHeight = _label.measuredHeight;
+        _label.measureMinSize();
+        if (maxLabelWidth < _label.measuredMinWidth)
+            maxLabelWidth = _label.measuredMinWidth;
+        if (maxHeight < _label.measuredMinHeight)
+            maxHeight = _label.measuredMinHeight;
         if (_icon) {
-            _icon.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            if (maxIconWidth < _icon.measuredWidth)
-                maxIconWidth = _icon.measuredWidth;
-            if (maxHeight < _icon.measuredHeight)
-                maxHeight = _icon.measuredHeight;
+            _icon.measureMinSize();
+            if (maxIconWidth < _icon.measuredMinWidth)
+                maxIconWidth = _icon.measuredMinWidth;
+            if (maxHeight < _icon.measuredMinHeight)
+                maxHeight = _icon.measuredMinHeight;
         }
         if (_accel) {
-            _accel.measure(SIZE_UNSPECIFIED, SIZE_UNSPECIFIED);
-            if (maxAccelWidth < _accel.measuredWidth)
-                maxAccelWidth = _accel.measuredWidth;
-            if (maxHeight < _accel.measuredHeight)
-                maxHeight = _accel.measuredHeight;
+            _accel.measureMinSize();
+            if (maxAccelWidth < _accel.measuredMinWidth)
+                maxAccelWidth = _accel.measuredMinWidth;
+            if (maxHeight < _accel.measuredMinHeight)
+                maxHeight = _accel.measuredMinHeight;
         }
     }
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         updateState();
         Rect m = margins;
         Rect p = padding;
         if (_item.type == MenuItemType.Separator) {
-            measuredContent(parentWidth, parentHeight, 1, 1); // for vertical (popup menu)
+            adjustMeasuredSize(parentWidth, parentHeight, 1, 1); // for vertical (popup menu)
             return;
         }
         // calc size constraints for children
@@ -361,10 +361,10 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
         if (parentHeight != SIZE_UNSPECIFIED)
             pheight -= m.top + m.bottom + p.top + p.bottom;
         if (_labelWidth)
-            measuredContent(parentWidth, parentHeight, _iconWidth + _labelWidth + _accelWidth, _height); // for vertical (popup menu)
+            adjustMeasuredSize(parentWidth, parentHeight, _iconWidth + _labelWidth + _accelWidth, _height); // for vertical (popup menu)
         else {
-            _label.measure(pwidth, pheight);
-            measuredContent(parentWidth, parentHeight, _label.measuredWidth, _label.measuredHeight); // for horizonral (main) menu
+            _label.measureSize(pwidth, pheight);
+            adjustMeasuredSize(parentWidth, parentHeight, _label.measuredWidth, _label.measuredHeight); // for horizonral (main) menu
         }
     }
 
@@ -495,6 +495,7 @@ class MenuWidgetBase : ListWidget {
         id = "popup_menu";
         styleId = STYLE_POPUP_MENU;
         menuItems = item;
+        _menuMode = true;
     }
 
     /// handle theme change: e.g. reload some themed resources
@@ -541,10 +542,10 @@ class MenuWidgetBase : ListWidget {
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (_orientation == Orientation.Horizontal) {
             // for horizontal (main) menu, don't align items
-            super.measure(parentWidth, parentHeight);
+            super.measureSize(parentWidth, parentHeight);
             return;
         }
 
@@ -568,7 +569,7 @@ class MenuWidgetBase : ListWidget {
             if (w)
                 w.setSubitemSizes(maxLabelWidth, maxHeight, maxIconWidth, maxAccelWidth);
         }
-        super.measure(parentWidth, parentHeight);
+        super.measureSize(parentWidth, parentHeight);
     }
 
     protected void performUndoSelection() {

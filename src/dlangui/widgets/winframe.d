@@ -92,4 +92,13 @@ class WindowFrame : VerticalLayout {
     protected Widget createBodyWidget() {
         return new Widget("DOCK_WINDOW_BODY");
     }
+
+    protected void setCaptionStyle(string captionStyleID) {
+        _captionLayout.styleId = captionStyleID;
+        _captionLayout.onThemeChanged();
+    }
+
+    protected string captionStyle() {
+        return _captionLayout.styleId;
+    }
 }

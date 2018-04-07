@@ -444,6 +444,10 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         if (executableFilterSelected()) {
             attrFilter |= AttrFilter.executable;
         }
+
+        if (_flags & FileDialogFlag.SelectDirectory)
+            attrFilter = (showHiddenFiles ? AttrFilter.dirs | AttrFilter.hidden : AttrFilter.dirs) | AttrFilter.parent;
+
         try {
             _entries = listDirectory(dir, attrFilter, selectedFilter());
         } catch(Exception e) {
@@ -464,7 +468,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
     void autofitGrid() {
         _fileList.autoFitColumnWidths();
-        //_fileList.setColWidth(1, 0);
+        // _fileList.setColWidth(1, 0);
         _fileList.fillColumnWidth(1);
     }
 
@@ -558,7 +562,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             adapter.add(btn);
         }
         res.ownAdapter = adapter;
-        res.layoutWidth(WRAP_CONTENT).layoutHeight(FILL_PARENT).layoutWeight(0);
+        res.layoutHeight(FILL_PARENT);
         res.itemClick = delegate(Widget source, int itemIndex) {
             openDirectory(_roots[itemIndex].path, null);
             res.selectItem(-1);
@@ -732,6 +736,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
         leftPanel = createRootsList();
         leftPanel.minWidth(WIDGET_STYLE_CONSOLE ? 7 : 40.pointsToPixels);
+        leftPanel.layoutHeight(FILL_PARENT);
 
         rightPanel = new VerticalLayout("main");
         rightPanel.layoutHeight(FILL_PARENT).layoutWidth(FILL_PARENT);
@@ -741,19 +746,16 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         content.addChild(rightPanel);
 
         _edPath = new FilePathPanel("path");
-        _edPath.layoutWidth(FILL_PARENT);
-        _edPath.layoutWeight = 0;
+        _edPath.layoutWidth(WRAP_CONTENT);
         _edPath.onPathSelectionListener = &onPathSelected;
         HorizontalLayout fnlayout = new HorizontalLayout();
         fnlayout.layoutWidth(FILL_PARENT);
         _edFilename = new EditLine("filename");
+        
         _edFilename.layoutWidth(FILL_PARENT);
         _edFilename.setDefaultPopupMenu();
-        if (_flags & FileDialogFlag.SelectDirectory) {
-            _edFilename.visibility = Visibility.Gone;
-        }
+        _edFilename.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
 
-        //_edFilename.layoutWeight = 0;
         fnlayout.addChild(_edFilename);
         if (_filters.length) {
             dstring[] filterLabels;
@@ -767,11 +769,14 @@ class FileDialog : Dialog, CustomGridCellAdapter {
                 return true;
             };
             _cbFilters.layoutWidth(WRAP_CONTENT);
-            _cbFilters.layoutWeight(0);
             //_cbFilters.backgroundColor = 0xFFC0FF;
             fnlayout.addChild(_cbFilters);
             //fnlayout.backgroundColor = 0xFFFFC0;
         }
+        if (_flags & FileDialogFlag.SelectDirectory) {
+            fnlayout.visibility = Visibility.Gone;
+        }
+        
 
         _fileList = new StringGridWidget("files");
         _fileList.styleId = STYLE_FILE_DIALOG_GRID;
@@ -980,8 +985,25 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
             itemPath = parentDir(itemPath);
         }
     }
+
+    override bool heightDependOnWidth() {
+        return true;
+    }
+
+    override void measureMinSize() {
+        int reservedForEmptySpace = 4.pointsToPixels;
+
+        if (childCount > 0) {
+            Widget item = child(0);
+            item.measureMinSize();
+            adjustMeasuredMinSize(item.measuredMinWidth + reservedForEmptySpace, item.measuredMinHeight);
+        }
+        else
+            adjustMeasuredMinSize(reservedForEmptySpace + 100, 1);
+    }
+    
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
 
@@ -1005,7 +1027,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
         bool exceeded = false;
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
-            item.measure(pwidth, pheight);
+            item.measureSize(pwidth, pheight);
             if (sz.y < item.measuredHeight)
                 sz.y = item.measuredHeight;
             if (sz.x + item.measuredWidth > pwidth) {
@@ -1014,7 +1036,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
             if (!exceeded || i == 0) // at least one item must be measured
                 sz.x += item.measuredWidth;
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
     }
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
@@ -1040,7 +1062,7 @@ class FilePathPanelButtons : WidgetGroupDefaultDrawing {
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
             item.visibility = Visibility.Visible;
-            item.measure(rc.width, rc.height);
+            item.measureSize(rc.width, rc.height);
             if (totalw + item.measuredWidth > rc.width) {
                 exceeded = true;
             }
@@ -1166,13 +1188,14 @@ class FileNameEditLine : HorizontalLayout {
 
     this(string ID = null) {
         super(ID);
+        layoutWidth(FILL_PARENT);
         _caption = UIString.fromId("TITLE_OPEN_FILE"c).value;
         _edFileName = new EditLine("FileNameEditLine_edFileName");
         _edFileName.minWidth(WIDGET_STYLE_CONSOLE ? 16 : 200);
-        _edFileName.layoutWidth = FILL_PARENT;
+        _edFileName.textToSetWidgetSize = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaa";
+        _edFileName.layoutWidth(FILL_PARENT);
         _btn = new Button("FileNameEditLine_btnFile", "..."d);
         _btn.styleId = STYLE_BUTTON_NOMARGINS;
-        _btn.layoutWeight = 0;
         _btn.click = delegate(Widget src) {
             FileDialog dlg = new FileDialog(UIString.fromRaw(_caption), window, null, _fileDialogFlags);
             foreach(key, value; _filetypeIcons)

@@ -870,8 +870,8 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
         super.layout(rc);
     }
 
-    override Point minimumVisibleContentSize() {
-        return Point(100.pointsToPixels, 100.pointsToPixels);
+    override void measureMinSize() {
+        adjustMeasuredMinSize(100.pointsToPixels, 100.pointsToPixels);
     }
 
     /// calculate full content size in pixels
@@ -886,7 +886,7 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone) {
             return;
         }
@@ -894,7 +894,7 @@ class TreeWidgetBase :  ScrollWidget, OnTreeContentChangeListener, OnTreeStateCh
             updateWidgets();
         if (_needUpdateWidgetStates)
             updateWidgetStates();
-        super.measure(parentWidth, parentHeight);
+        super.measureSize(parentWidth, parentHeight);
     }
 
     /// listener

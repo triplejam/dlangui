@@ -261,6 +261,19 @@ const Action[] STD_EDITOR_ACTIONS = [ACTION_EDITOR_INSERT_NEW_LINE, ACTION_EDITO
         ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO
 ];
 
+/// The structure in which the editors keep the data displayed. This is a reference to the appropriate line in the content and index of the first and last character from this content line.
+struct LineSpan {
+    /// index of content line
+    int contentLine; 
+    /// first character from content line that is in this span
+    int firstCharIndex;
+    /// last character from content line that is in this span
+    int lastCharIndex;
+    /// content of this span
+    dstring content;
+}
+
+
 /// base for all editor widgets
 class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemActionHandler {
     protected EditableContent _content;
@@ -394,17 +407,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     /// true if word wrap mode is set
     @property EditWidgetBase wordWrap(bool v) {
         _wordWrap = v;
-        //Horizontal scrollbar should not be visible in word wrap mode
         if (v)
         {
-            _hscrollbar.visibility(Visibility.Invisible);
             previousXScrollPos = _scrollPos.x;
             _scrollPos.x = 0;
             wordWrapRefresh();
         }
         else
         {
-            _hscrollbar.visibility(Visibility.Visible);
             _scrollPos.x = previousXScrollPos;
         }
         invalidate();
@@ -415,16 +425,20 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     dchar[] splitChars = [' ', '-', '\t'];
     
     /// Divides up a string for word wrapping, sets info in _span
-    dstring[] wrapLine(dstring str, int lineNumber) {
+    void wrapLine(dstring str, int lineNumber) {
+        if (!str.length) {
+            _span ~= LineSpan(lineNumber, -1, -1, ""d);
+            //Log.d("span0  ", LineSpan(lineNumber, -1, -1, ""d));
+            return;
+        }
+
         FontRef font = font();
         dstring[] words = explode(str, splitChars);
-        int curLineLength = 0;
         dchar[] buildingStr;
-        dstring[] buildingStrArr;
-        WrapPoint[] wrapPoints;
-        int wrappedLineCount = 0;
         int curLineWidth = 0;
         int maxWidth = _clientRect.width;
+        int firstCharIndex = 0;
+        int lastCharIndex = 0;
         for (int i = 0; i < words.length; i++)
         {
             dstring word = words[i];
@@ -432,33 +446,34 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             {
                 if (curLineWidth > 0)
                 {
-                    buildingStrArr ~= to!dstring(buildingStr);
-                    wrappedLineCount++;
-                    wrapPoints ~= WrapPoint(curLineLength, curLineWidth);
-                    curLineLength = 0;
+                    _span ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1 , to!dstring(buildingStr));
+                    //Log.d("span1  ", LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1, to!dstring(buildingStr)));
                     curLineWidth = 0;
+                    firstCharIndex = firstCharIndex + cast(int)buildingStr.length;
                     buildingStr = [];
                 }
                 while (measureWrappedText(word) > maxWidth)
                 {
                     //For when string still too long
                     int wrapPoint = findWrapPoint(word);
-                    wrapPoints ~= WrapPoint(wrapPoint, measureWrappedText(word[0..wrapPoint]));
                     buildingStr ~= word[0 .. wrapPoint];
                     word = word[wrapPoint .. $];
-                    buildingStrArr ~= to!dstring(buildingStr);
+                    lastCharIndex = firstCharIndex + cast(int)buildingStr.length -1;
+                    _span ~= LineSpan(lineNumber, firstCharIndex, lastCharIndex, to!dstring(buildingStr));
+                    //Log.d("span2  ", LineSpan(lineNumber, firstCharIndex, lastCharIndex, to!dstring(buildingStr)));
+                    
+                    firstCharIndex = lastCharIndex + 1;
                     buildingStr = [];
-                    wrappedLineCount++;
                 }
             }
             buildingStr ~= word;
-            curLineLength += to!int(word.length);
+            if (word.length)
+                lastCharIndex += word.length-1;
             curLineWidth += measureWrappedText(word);
         }
-        wrapPoints ~= WrapPoint(curLineLength, curLineWidth);
-        buildingStrArr ~= to!dstring(buildingStr);
-        _span ~= LineSpan(lineNumber, wrappedLineCount + 1, wrapPoints, buildingStrArr);
-        return buildingStrArr;
+        
+        _span ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length - 1, to!dstring(buildingStr));
+        ////Log.d("span3  ", LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length - 1, to!dstring(buildingStr)));
     }
 
     /// Divide (and conquer) text into words
@@ -494,28 +509,38 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             startIndex = index + 1;
         }
     }
-    
-    /// information about line span into several lines - in word wrap mode
-    protected LineSpan[] _span;
-    protected LineSpan[] _spanCache;
-    
-    /// Finds good visual wrapping point for string
-    int findWrapPoint(dstring text)
-    {
-        int maxWidth = _clientRect.width;
-        int wrapPoint = 0;
-        while (true)
-        {
-            if (measureWrappedText(text[0 .. wrapPoint]) < maxWidth)
-            {
-                wrapPoint++;
-            }
-            else
-            {
-                return wrapPoint;
+
+    void wrapContent() {
+        _span = [];
+        if (_wordWrap && _clientRect.width > 0) {
+            for(int i = 0 ; i< content.lines.length ; i++) {
+                wrapLine(content.lines[i], i);
             }
         }
-     }
+        else
+            for(int i = 0 ; i < content.lines.length ; i++) {
+                 if (content.lines[i].length > 0)
+                    _span ~= LineSpan(i, 0, cast(int)content.lines[i].length-1, content.lines[i]);
+                else
+                    _span ~= LineSpan(i, -1, -1, ""d);
+            }
+        correctCaretPos();
+    }
+    
+    /// An array in which edit stores data adapted to display.
+    protected LineSpan[] _span;
+    
+    /// Finds good visual wrapping point for string
+    int findWrapPoint(dstring text) {
+        int maxWidth = _clientRect.width;
+        int wrapPoint = 0;
+        while (true) {
+            if (measureWrappedText(text[0 .. wrapPoint]) < maxWidth)
+                wrapPoint++;
+            else
+                return wrapPoint-1;
+        }
+    }
     
     /// Calls measureText for word wrap
     int measureWrappedText(dstring text)
@@ -530,47 +555,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         return 0;
     }
     
-    /// Returns number of visible wraps up to a line (not including the first wrapLines themselves)
-    int wrapsUpTo(int line)
-    {
-        int sum;
-        lineSpanIterate(delegate(LineSpan curSpan)
-        {
-            if (curSpan.start < line)
-                sum += curSpan.len - 1;
-        });
-        return sum;
-    }
-    
     /// Returns LineSpan for line based on actual line number
     LineSpan getSpan(int lineNumber)
     {
-        LineSpan lineSpan = LineSpan(lineNumber, 0, [WrapPoint(0,0)], []);
-        lineSpanIterate(delegate(LineSpan curSpan)
-        {
-            if (curSpan.start == lineNumber)
-                lineSpan = curSpan;
-        });
-        return lineSpan;
-    }
-    
-    /// Based on a TextPosition, finds which wrapLine it is on for its current line
-    int findWrapLine(TextPosition textPos)
-    {
-        int curWrapLine = 0;
-        int curPosition = textPos.pos;
-        LineSpan curSpan = getSpan(textPos.line);
-        while (true)
-        {
-            if (curWrapLine == curSpan.wrapPoints.length - 1)
-                return curWrapLine;
-            curPosition -= curSpan.wrapPoints[curWrapLine].wrapPos;
-            if (curPosition < 0)
-            {   
-                return curWrapLine;
-            }
-            curWrapLine++;
-        }
+        return _span[lineNumber];
     }
     
     /// Simple way of iterating through _span
@@ -1119,13 +1107,98 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _content.syntaxSupport.applySmartIndent(operation, this);
     }
 
+
+    /// Translate content text range to span text range.
+    protected TextRange contentTextRangeToSpanTextRange(TextRange contentTextRange) {
+        return TextRange(contentTextPosToSpanTextPos(contentTextRange.start), contentTextPosToSpanTextPos(contentTextRange.end));
+    }
+
+    /// Translate content text position to span text position.
+    protected TextPosition contentTextPosToSpanTextPos(TextPosition contentTextPos) {
+        if (!_wordWrap) {
+            return contentTextPos;
+        }
+        
+        int spanLine = -1;
+        LineSpan lsp;
+        int charsBefore = 0;
+        int charsCount;
+        for (int i = 0 ; i < _span.length ; i++) {
+            lsp = _span[i];
+            if (spanLine == -1 && contentTextPos.line == lsp.contentLine) {
+                spanLine = i;
+                charsBefore = 0;
+            }
+
+            if (spanLine != -1 && contentTextPos.line == lsp.contentLine) {
+                charsCount = lsp.lastCharIndex + 1;
+                if (charsCount >= contentTextPos.pos) {
+                    return TextPosition(i, contentTextPos.pos - charsBefore);
+                }
+                else {
+                    charsBefore = charsCount;
+                    continue;
+                }
+            }
+            
+        }
+
+        Log.d("Bug in content position -> span position. Content position not found in spans - it should never happen ", contentTextPos);
+        return TextPosition(0, 0);
+    }
+
+    /// Translate span text position to content text position
+    TextPosition spanTextPosToContentTextPos(TextPosition spanTextPos) {
+        if (!_wordWrap) {
+            return spanTextPos;
+        }
+
+        LineSpan lsp = _span[spanTextPos.line];
+        // Log.d("span text pos ", spanTextPos);
+        // Log.d("content text pos ", TextPosition(lsp.contentLine, lsp.firstCharIndex < 0 ? spanTextPos.pos : spanTextPos.pos + lsp.firstCharIndex));
+        return TextPosition(lsp.contentLine, lsp.firstCharIndex < 0 ? spanTextPos.pos : spanTextPos.pos + lsp.firstCharIndex);
+    }
+
+    /// Translate span text range to content text range
+    TextRange spanTextRangeToContentTextRange(TextRange spanTextRange) {
+        if (!_wordWrap) {
+            return spanTextRange;
+        }
+        return TextRange(spanTextPosToContentTextPos(spanTextRange.start), spanTextPosToContentTextPos(spanTextRange.end));
+    }
+
+    /// when position is out of span bounds, fix it to nearest valid position
+    void correctPositionInSpan(ref TextPosition position) {
+        if (position.line >= _span.length) {
+            position.line = cast(int)_span.length - 1;
+            position.pos = cast(int)_span[position.line].content.length;
+        }
+        if (position.line < 0) {
+            position.line = 0;
+            position.pos = 0;
+        }
+        int currentLineLength = cast(int)_span[position.line].content.length;
+        if (position.pos > currentLineLength)
+            position.pos = currentLineLength;
+        if (position.pos < 0)
+            position.pos = 0;
+    }
+
+    /// when range positions is out of span bounds, fix it to nearest valid position
+    void correctRangeInSpan(ref TextRange range) {
+        correctPositionInSpan(range.start);
+        correctPositionInSpan(range.end);
+    }
+    
+    
     override void onContentChange(EditableContent content, EditOperation operation, ref TextRange rangeBefore, ref TextRange rangeAfter, Object source) {
         //Log.d("onContentChange rangeBefore=", rangeBefore, " rangeAfter=", rangeAfter, " text=", operation.content);
         _contentChanged = true;
         if (source is this) {
             if (operation.action == EditAction.ReplaceContent) {
                 // fully replaced, e.g., loaded from file or text property is assigned
-                _caretPos = rangeAfter.end;
+                wrapContent();
+                _caretPos = contentTextPosToSpanTextPos(rangeAfter.end);
                 _selectionRange.start = _caretPos;
                 _selectionRange.end = _caretPos;
                 updateMaxLineWidth();
@@ -1138,7 +1211,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 // saved
             } else {
                 // modified
-                _caretPos = rangeAfter.end;
+                wrapContent(); // TODO: optimize do not make all spans only change modified
+                _caretPos = contentTextPosToSpanTextPos(rangeAfter.end);
                 _selectionRange.start = _caretPos;
                 _selectionRange.end = _caretPos;
                 updateMaxLineWidth();
@@ -1148,6 +1222,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 processSmartIndent(operation);
             }
         } else {
+            wrapContent(); // TODO: optimize do not make all spans only change modified
             updateMaxLineWidth();
             measureVisibleText();
             correctCaretPos();
@@ -1285,14 +1360,11 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         super.handleFocusChange(focused);
     }
 
-    //In word wrap mode, set by caretRect so ensureCaretVisible will know when to scroll
-    protected int caretHeightOffset;
-    
     /// returns cursor rectangle
     protected Rect caretRect() {
         Rect caretRc = textPosToClient(_caretPos);
         if (_replaceMode) {
-            dstring s = _content[_caretPos.line];
+            dstring s = _span[_caretPos.line].content;
             if (_caretPos.pos < s.length) {
                 TextPosition nextPos = _caretPos;
                 nextPos.pos++;
@@ -1302,22 +1374,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 caretRc.right += _spaceWidth;
             }
         }
-        if (_wordWrap)
-        {
-            _scrollPos.x = 0;
-            int wrapLine = findWrapLine(_caretPos);
-            int xOffset;
-            if (wrapLine > 0)
-            {
-                LineSpan curSpan = getSpan(_caretPos.line);
-                xOffset = curSpan.accumulation(wrapLine, LineSpan.WrapPointInfo.Width);
-            }
-            auto yOffset = -1 * _lineHeight * (wrapsUpTo(_caretPos.line) + wrapLine);
-            caretHeightOffset = yOffset;
-            caretRc.offset(_clientRect.left - xOffset, _clientRect.top - yOffset);
-        }
-        else
-            caretRc.offset(_clientRect.left, _clientRect.top);
+        caretRc.offset(_clientRect.left, _clientRect.top);
         return caretRc;
     }
 
@@ -1372,9 +1429,9 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     /// when cursor position or selection is out of content bounds, fix it to nearest valid position
     protected void correctCaretPos() {
-        _content.correctPosition(_caretPos);
-        _content.correctPosition(_selectionRange.start);
-        _content.correctPosition(_selectionRange.end);
+        correctPositionInSpan(_caretPos);
+        correctPositionInSpan(_selectionRange.start);
+        correctPositionInSpan(_selectionRange.end);
         if (_selectionRange.empty)
             _selectionRange = TextRange(_caretPos, _caretPos);
         handleEditorStateChange();
@@ -1455,54 +1512,11 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _textToHighlightOptions = textToHighlightOptions;
         invalidate();
     }
-    
-    /// Used instead of using clientToTextPos for mouse input when in word wrap mode
-    protected TextPosition wordWrapMouseOffset(int x, int y)
-    {
-        if(_span.length == 0)
-            return clientToTextPos(Point(x,y));
-        int selectedVisibleLine = y / _lineHeight;
-            
-        LineSpan _curSpan;
-        
-        int wrapLine = 0;
-        int curLine = 0;
-        bool foundWrap = false;
-        int accumulativeWidths = 0;
-        int curWrapOfSpan = 0;
-        
-        lineSpanIterate(delegate(LineSpan curSpan){
-            while (!foundWrap)
-            {
-                if (wrapLine == selectedVisibleLine)
-                {
-                    foundWrap = true;
-                    break;
-                }
-                accumulativeWidths += curSpan.wrapPoints[curWrapOfSpan].wrapWidth;
-                wrapLine++;
-                curWrapOfSpan++;
-                if (curWrapOfSpan >= curSpan.len)
-                {
-                    break;
-                }
-            }
-            if (!foundWrap)
-            {
-                accumulativeWidths = 0;
-                curLine++;
-            }
-            curWrapOfSpan = 0;
-        });
-        
-        int fakeLineHeight = curLine * _lineHeight;
-        return clientToTextPos(Point(x + accumulativeWidths,fakeLineHeight));
-    }
 
     protected void selectWordByMouse(int x, int y) {
         TextPosition oldCaretPos = _caretPos;
-        TextPosition newPos = _wordWrap ? wordWrapMouseOffset(x,y) : clientToTextPos(Point(x,y));
-        TextRange r = content.wordBounds(newPos);
+        TextPosition newPos = clientToTextPos(Point(x,y));
+        TextRange r = contentTextRangeToSpanTextRange(content.wordBounds(spanTextPosToContentTextPos(newPos)));
         if (r.start < r.end) {
             _selectionRange = r;
             _caretPos = r.end;
@@ -1517,10 +1531,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     protected void selectLineByMouse(int x, int y, bool onSameLineOnly = true) {
         TextPosition oldCaretPos = _caretPos;
-        TextPosition newPos = _wordWrap ? wordWrapMouseOffset(x,y) : clientToTextPos(Point(x,y));
+        TextPosition newPos = clientToTextPos(Point(x,y));
         if (onSameLineOnly && newPos.line != oldCaretPos.line)
             return; // different lines
-        TextRange r = content.lineRange(newPos.line);
+        TextRange r = contentTextRangeToSpanTextRange(content.lineRange(spanTextPosToContentTextPos(newPos).line));
         if (r.start < r.end) {
             _selectionRange = r;
             _caretPos = r.end;
@@ -1535,7 +1549,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     protected void updateCaretPositionByMouse(int x, int y, bool selecting) {
         TextPosition oldCaretPos = _caretPos;
-        TextPosition newPos = _wordWrap ? wordWrapMouseOffset(x,y) : clientToTextPos(Point(x,y));
+        TextPosition newPos = clientToTextPos(Point(x,y));
         if (newPos != _caretPos) {
             _caretPos = newPos;
             updateSelectionAfterCursorMovement(oldCaretPos, selecting);
@@ -1552,13 +1566,13 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     /// returns true if one or more lines selected fully
     protected bool multipleLinesSelected() {
-        return _selectionRange.end.line > _selectionRange.start.line;
+        return spanTextPosToContentTextPos(_selectionRange.end).line > spanTextPosToContentTextPos(_selectionRange.start).line;
     }
 
     protected bool _camelCasePartsAsWords = true;
 
     void replaceSelectionText(dstring newText) {
-        EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [newText]);
+        EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [newText]);
         _content.performOperation(op, this);
         ensureCaretVisible();
     }
@@ -1567,7 +1581,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         if (_selectionRange.empty)
             return false;
         // clear selection
-        EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [""d]);
+        EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [""d]);
         _content.performOperation(op, this);
         ensureCaretVisible();
         return true;
@@ -1580,13 +1594,13 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     /// returns text for specified range (joined with LF when span over multiple lines)
     public dstring getRangeText(TextRange range) {
-        dstring selectionText = concatDStrings(_content.rangeText(range));
+        dstring selectionText = concatDStrings(_content.rangeText(spanTextRangeToContentTextRange(range)));
         return selectionText;
     }
 
     /// returns range for line with cursor
     @property public TextRange currentLineRange() {
-        return _content.lineRange(_caretPos.line);
+        return contentTextRangeToSpanTextRange(_content.lineRange(spanTextPosToContentTextPos(_caretPos).line));
     }
 
     /// clears selection (don't change text, just unselect)
@@ -1600,7 +1614,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             return false;
         _selectionRange = range;
         _caretPos = _selectionRange.start;
-        EditOperation op = new EditOperation(EditAction.Replace, range, [""d]);
+        EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(range), [""d]);
         _content.performOperation(op, this);
         //_selectionRange.start = _caretPos;
         //_selectionRange.end = _caretPos;
@@ -1629,7 +1643,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case ToggleBlockComment:
                 if (!_content.syntaxSupport || !_content.syntaxSupport.supportsToggleBlockComment)
                     a.state = ACTION_STATE_INVISIBLE;
-                else if (enabled && _content.syntaxSupport.canToggleBlockComment(_selectionRange))
+                else if (enabled && _content.syntaxSupport.canToggleBlockComment(spanTextRangeToContentTextRange(_selectionRange)))
                     a.state = ACTION_STATE_ENABLED;
                 else
                     a.state = ACTION_STATE_DISABLE;
@@ -1637,7 +1651,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case ToggleLineComment:
                 if (!_content.syntaxSupport || !_content.syntaxSupport.supportsToggleLineComment)
                     a.state = ACTION_STATE_INVISIBLE;
-                else if (enabled && _content.syntaxSupport.canToggleLineComment(_selectionRange))
+                else if (enabled && _content.syntaxSupport.canToggleLineComment(spanTextRangeToContentTextRange(_selectionRange)))
                     a.state = ACTION_STATE_ENABLED;
                 else
                     a.state = ACTION_STATE_DISABLE;
@@ -1663,7 +1677,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     override protected bool handleAction(const Action a) {
         TextPosition oldCaretPos = _caretPos;
-        dstring currentLine = _content[_caretPos.line];
+        ////dstring currentLine = _content[_caretPos.line];
+        dstring currentLine = _span[_caretPos.line].content;
         switch (a.id) with(EditorActions)
         {
             case Left:
@@ -1674,7 +1689,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                     ensureCaretVisible();
                 } else if (_caretPos.line > 0) {
-                    _caretPos = _content.lineEnd(_caretPos.line - 1);
+                    _caretPos.pos = cast(int) _span[_caretPos.line -1].content.length;
+                    _caretPos.line = _caretPos.line -1;
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                     ensureCaretVisible();
                 }
@@ -1686,7 +1702,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     _caretPos.pos++;
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                     ensureCaretVisible();
-                } else if (_caretPos.line < _content.length && _content.multiline) {
+                } else if (_caretPos.line < _span.length && _content.multiline) {
                     _caretPos.pos = 0;
                     _caretPos.line++;
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
@@ -1696,7 +1712,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case WordLeft:
             case SelectWordLeft:
                 {
-                    TextPosition newpos = _content.moveByWord(_caretPos, -1, _camelCasePartsAsWords);
+                    TextPosition newpos = contentTextPosToSpanTextPos(_content.moveByWord(spanTextPosToContentTextPos(_caretPos), -1, _camelCasePartsAsWords));
                     if (newpos != _caretPos) {
                         _caretPos = newpos;
                         updateSelectionAfterCursorMovement(oldCaretPos, a.id == EditorActions.SelectWordLeft);
@@ -1707,7 +1723,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case WordRight:
             case SelectWordRight:
                 {
-                    TextPosition newpos = _content.moveByWord(_caretPos, 1, _camelCasePartsAsWords);
+                    TextPosition newpos = contentTextPosToSpanTextPos(_content.moveByWord(spanTextPosToContentTextPos(_caretPos), 1, _camelCasePartsAsWords));
                     if (newpos != _caretPos) {
                         _caretPos = newpos;
                         updateSelectionAfterCursorMovement(oldCaretPos, a.id == EditorActions.SelectWordRight);
@@ -1726,7 +1742,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 return true;
             case LineBegin:
             case SelectLineBegin:
-                auto space = _content.getLineWhiteSpace(_caretPos.line);
+                auto space = _content.getLineWhiteSpace(spanTextPosToContentTextPos(_caretPos).line);
                 if (_caretPos.pos > 0) {
                     if (_caretPos.pos > space.firstNonSpaceIndex && space.firstNonSpaceIndex > 0)
                         _caretPos.pos = space.firstNonSpaceIndex;
@@ -1736,7 +1752,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                 } else {
                     // caret pos is 0
-                    if (space.firstNonSpaceIndex > 0)
+                    if (space.firstNonSpaceIndex > 0 && _caretPos.pos > space.firstNonSpaceIndex)
                         _caretPos.pos = space.firstNonSpaceIndex;
                     ensureCaretVisible();
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
@@ -1747,9 +1763,9 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 return true;
             case DocumentEnd:
             case SelectDocumentEnd:
-                if (_caretPos.line < _content.length - 1 || _caretPos.pos < _content[_content.length - 1].length) {
-                    _caretPos.line = _content.length - 1;
-                    _caretPos.pos = cast(int)_content[_content.length - 1].length;
+                if (_caretPos.line < _span.length - 1 || _caretPos.pos < _span[_span.length - 1].content.length) {
+                    _caretPos.line = cast(int)_span.length - 1;
+                    _caretPos.pos = cast(int)_span[_span.length - 1].content.length;
                     ensureCaretVisible();
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                 }
@@ -1770,7 +1786,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 correctCaretPos();
                 if (removeSelectionTextIfSelected()) // clear selection
                     return true;
-                TextPosition newpos = _content.moveByWord(_caretPos, -1, _camelCasePartsAsWords);
+                TextPosition newpos = contentTextPosToSpanTextPos(_content.moveByWord(spanTextPosToContentTextPos(_caretPos), -1, _camelCasePartsAsWords));
                 if (newpos < _caretPos)
                     removeRangeText(TextRange(newpos, _caretPos));
                 return true;
@@ -1780,7 +1796,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 correctCaretPos();
                 if (removeSelectionTextIfSelected()) // clear selection
                     return true;
-                TextPosition newpos = _content.moveByWord(_caretPos, 1, _camelCasePartsAsWords);
+                TextPosition newpos = contentTextPosToSpanTextPos(_content.moveByWord(spanTextPosToContentTextPos(_caretPos), 1, _camelCasePartsAsWords));
                 if (newpos > _caretPos)
                     removeRangeText(TextRange(_caretPos, newpos));
                 return true;
@@ -1798,7 +1814,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 } else if (_caretPos.line > 0) {
                     // merge with previous line
                     TextRange range = TextRange(_caretPos, _caretPos);
-                    range.start = _content.lineEnd(range.start.line - 1);
+                    range.start = contentTextPosToSpanTextPos(_content.lineEnd(spanTextPosToContentTextPos(range.start).line - 1));
                     removeRangeText(range);
                 }
                 return true;
@@ -1831,7 +1847,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     dstring selectionText = getRangeText(range);
                     platform.setClipboardText(selectionText);
                     if (!readOnly && a.id == Cut) {
-                        EditOperation op = new EditOperation(EditAction.Replace, range, [""d]);
+                        EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(range), [""d]);
                         _content.performOperation(op, this);
                     }
                 }
@@ -1847,7 +1863,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     } else {
                         lines = [replaceEolsWithSpaces(selectionText)];
                     }
-                    EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, lines);
+                    EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), lines);
                     _content.performOperation(op, this);
                 }
                 return true;
@@ -1878,11 +1894,11 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     if (_selectionRange.empty) {
                         if (useSpacesForTabs) {
                             // insert one or more spaces to
-                            EditOperation op = new EditOperation(EditAction.Replace, TextRange(_caretPos, _caretPos), [spacesForTab(_caretPos.pos)]);
+                            EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(TextRange(_caretPos, _caretPos)), [spacesForTab(_caretPos.pos)]);
                             _content.performOperation(op, this);
                         } else {
                             // just insert tab character
-                            EditOperation op = new EditOperation(EditAction.Replace, TextRange(_caretPos, _caretPos), ["\t"d]);
+                            EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(TextRange(_caretPos, _caretPos)), ["\t"d]);
                             _content.performOperation(op, this);
                         }
                     } else {
@@ -1893,11 +1909,11 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                             // insert tab
                             if (useSpacesForTabs) {
                                 // insert one or more spaces to
-                                EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [spacesForTab(_selectionRange.start.pos)]);
+                                EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [spacesForTab(_selectionRange.start.pos)]);
                                 _content.performOperation(op, this);
                             } else {
                                 // just insert tab character
-                                EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, ["\t"d]);
+                                EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), ["\t"d]);
                                 _content.performOperation(op, this);
                             }
                         }
@@ -1913,7 +1929,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                         // remove spaces before caret
                         TextRange r = spaceBefore(_caretPos);
                         if (!r.empty) {
-                            EditOperation op = new EditOperation(EditAction.Replace, r, [""d]);
+                            EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(r), [""d]);
                             _content.performOperation(op, this);
                         }
                     } else {
@@ -1927,7 +1943,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                                 int nchars = r.end.pos - r.start.pos;
                                 TextRange saveRange = _selectionRange;
                                 TextPosition saveCursor = _caretPos;
-                                EditOperation op = new EditOperation(EditAction.Replace, r, [""d]);
+                                EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(r), [""d]);
                                 _content.performOperation(op, this);
                                 if (saveCursor.line == saveRange.start.line)
                                     saveCursor.pos -= nchars;
@@ -1951,7 +1967,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 return true;
             case ToggleBookmark:
                 if (_content.multiline) {
-                    int line = a.longParam >= 0 ? cast(int)a.longParam : _caretPos.line;
+                    int line = a.longParam >= 0 ? cast(int)a.longParam : spanTextPosToContentTextPos(_caretPos).line;
                     _content.lineIcons.toggleBookmark(line);
                     return true;
                 }
@@ -1959,7 +1975,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             case GoToNextBookmark:
             case GoToPreviousBookmark:
                 if (_content.multiline) {
-                    LineIcon mark = _content.lineIcons.findNext(LineIconType.bookmark, _selectionRange.end.line, a.id == EditorActions.GoToNextBookmark ? 1 : -1);
+                    // maybe there is bug
+                    LineIcon mark = _content.lineIcons.findNext(LineIconType.bookmark, spanTextPosToContentTextPos(_selectionRange.end).line, a.id == EditorActions.GoToNextBookmark ? 1 : -1);
                     if (mark) {
                         setCaretPos(mark.line, 0, true);
                         return true;
@@ -1976,14 +1993,15 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     void selectAll() {
         _selectionRange.start.line = 0;
         _selectionRange.start.pos = 0;
-        _selectionRange.end = _content.lineEnd(_content.length - 1);
+        _selectionRange.end.line = cast(int)_span.length -1;
+        _selectionRange.end.pos = cast(int)_span[_span.length -1].content.length;
         _caretPos = _selectionRange.end;
         requestActionsUpdate();
     }
 
     protected TextRange spaceBefore(TextPosition pos) {
         TextRange res = TextRange(pos, pos);
-        dstring s = _content[pos.line];
+        dstring s = _span[pos.line].content;
         int x = 0;
         int start = -1;
         for (int i = 0; i < pos.pos; i++) {
@@ -2056,7 +2074,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     /// indent / unindent range
     protected void indentRange(bool back) {
-        TextRange r = _selectionRange;
+        TextRange r = spanTextRangeToContentTextRange(_selectionRange);
         r.start.pos = 0;
         if (r.end.pos > 0)
             r.end = _content.lineBegin(r.end.line + 1);
@@ -2079,7 +2097,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             TextPosition saveCursor = _caretPos;
             EditOperation op = new EditOperation(EditAction.Replace, r, newContent);
             _content.performOperation(op, this);
-            _selectionRange = saveRange;
+            _selectionRange = contentTextRangeToSpanTextRange(saveRange);
             _caretPos = saveCursor;
             ensureCaretVisible();
         }
@@ -2115,10 +2133,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     // replace next char(s)
                     TextRange range = _selectionRange;
                     range.end.pos += cast(int)event.text.length;
-                    EditOperation op = new EditOperation(EditAction.Replace, range, [event.text]);
+                    EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(range), [event.text]);
                     _content.performOperation(op, this);
                 } else {
-                    EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [event.text]);
+                    EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [event.text]);
                     _content.performOperation(op, this);
                 }
                 return true;
@@ -2269,12 +2287,19 @@ interface EnterKeyHandler {
     bool onEnterKey(EditWidgetBase editor);
 }
 
+interface EscKeyHandler {
+    bool onEscKey(EditWidgetBase editor);
+}
+
+
 /// single line editor
 class EditLine : EditWidgetBase {
 
     Signal!EditorActionHandler editorAction;
     /// handle Enter key press inside line editor
     Signal!EnterKeyHandler enterKey;
+
+    Signal!EscKeyHandler escKey;
 
     /// empty parameter list constructor - for usage by factory
     this() {
@@ -2408,15 +2433,21 @@ class EditLine : EditWidgetBase {
         return _measuredTextToSetWidgetSize;
     }
 
-    /// measure
-    override void measure(int parentWidth, int parentHeight) {
+    /// measure min size
+    override void measureMinSize() {
+        Point sz = measureTextToSetWidgetSize();
+        adjustMeasuredMinSize(sz.x, sz.y);
+    }
+    
+    /// measure size
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone)
             return;
 
         updateFontProps();
+        ////wrapContent();
         measureVisibleText();
-        measureTextToSetWidgetSize();
-        measuredContent(parentWidth, parentHeight, _measuredTextToSetWidgetSize.x + _leftPaneWidth, _measuredTextToSetWidgetSize.y);
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredTextToSetWidgetSize.x + _leftPaneWidth, _measuredTextToSetWidgetSize.y);
     }
 
     override bool handleAction(const Action a) {
@@ -2452,6 +2483,16 @@ class EditLine : EditWidgetBase {
                     return true;
                 if (event.action == KeyAction.KeyUp) {
                     if (enterKey(this))
+                       return true;
+                }
+            }
+        }
+        if (escKey.assigned) {
+            if (event.keyCode == KeyCode.ESCAPE && event.modifiers == 0) {
+                if (event.action == KeyAction.KeyDown)
+                    return true;
+                if (event.action == KeyAction.KeyUp) {
+                    if (escKey(this))
                        return true;
                 }
             }
@@ -2572,6 +2613,7 @@ class EditBox : EditWidgetBase {
     /// Set _needRewrap to true;
     override void wordWrapRefresh()
     {
+        _extendRightScrollBound=!_wordWrap;
         _needRewrap = true;
     }
     
@@ -2583,10 +2625,15 @@ class EditBox : EditWidgetBase {
     }
     
     override protected int lineCount() {
-        return _content.length;
+        //return _content.length;
+        return cast(int) _span.length;
     }
 
     override protected void updateMaxLineWidth() {
+        if (_wordWrap) {
+            _maxLineWidth = clientRect.width;
+            return;
+        }
         // find max line width. TODO: optimize!!!
         int maxw;
         int[] buf;
@@ -2626,7 +2673,7 @@ class EditBox : EditWidgetBase {
         Rect contentRc = rc;
         int findPanelHeight;
         if (_findPanel && _findPanel.visibility != Visibility.Gone) {
-            _findPanel.measure(rc.width, rc.height);
+            _findPanel.measureSize(rc.width, rc.height);
             findPanelHeight = _findPanel.measuredHeight;
             _findPanel.layout(Rect(rc.left, rc.bottom - findPanelHeight, rc.right, rc.bottom));
             contentRc.bottom -= findPanelHeight;
@@ -2647,17 +2694,18 @@ class EditBox : EditWidgetBase {
         FontRef font = font();
         _lineHeight = font.height;
         _numVisibleLines = (_clientRect.height + _lineHeight - 1) / _lineHeight;
-        if (_firstVisibleLine >= _content.length) {
-            _firstVisibleLine = _content.length - _numVisibleLines + 1;
-            if (_firstVisibleLine < 0)
+        if (_firstVisibleLine >= _span.length) {
+            _firstVisibleLine = cast(int)_span.length - _numVisibleLines + 1;
+            if (_firstVisibleLine < 0) {
                 _firstVisibleLine = 0;
-            _caretPos.line = _content.length - 1;
+            }
+            _caretPos.line = cast(int)_span.length - 1;
             _caretPos.pos = 0;
         }
         if (_numVisibleLines < 1)
             _numVisibleLines = 1;
-        if (_firstVisibleLine + _numVisibleLines > _content.length)
-            _numVisibleLines = _content.length - _firstVisibleLine;
+        if (_firstVisibleLine + _numVisibleLines > _span.length)
+            _numVisibleLines = cast(int)_span.length - _firstVisibleLine;
         if (_numVisibleLines < 1)
             _numVisibleLines = 1;
         _visibleLines.length = _numVisibleLines;
@@ -2670,7 +2718,7 @@ class EditBox : EditWidgetBase {
             _visibleLinesHighlightsBuf.length = _numVisibleLines;
         }
         for (int i = 0; i < _numVisibleLines; i++) {
-            _visibleLines[i] = _content[_firstVisibleLine + i];
+            _visibleLines[i] = _span[_firstVisibleLine + i].content;
             size_t len = _visibleLines[i].length;
             if (_visibleLinesMeasurement[i].length < len)
                 _visibleLinesMeasurement[i].length = len;
@@ -2683,7 +2731,7 @@ class EditBox : EditWidgetBase {
                 sz.x = _visibleLinesWidths[i]; // width - max from visible lines
         }
         sz.x = _maxLineWidth;
-        sz.y = _lineHeight * _content.length; // height - for all lines
+        sz.y = cast(int)(_lineHeight * (_span.length)); // height - for all lines
         return sz;
     }
 
@@ -2711,7 +2759,7 @@ class EditBox : EditWidgetBase {
         // either h or v scrollbar is in auto mode
         //Point contentSize = fullContentSize();
         int contentWidth = _maxLineWidth + (_extendRightScrollBound ? _clientRect.width / 16 : 0);
-        int contentHeight = _content.length;
+        int contentHeight = cast(int)_span.length;
 
         int clientWidth = _clientRect.width;
         int clientHeight = visibleLines;
@@ -2763,7 +2811,7 @@ class EditBox : EditWidgetBase {
         int visibleLines = _lineHeight ? _clientRect.height / _lineHeight : 1; // fully visible lines
         if (visibleLines < 1)
             visibleLines = 1;
-        _vscrollbar.setRange(0, _content.length);
+        _vscrollbar.setRange(0, cast(int)_span.length);
         _vscrollbar.pageSize = visibleLines;
         _vscrollbar.position = _firstVisibleLine;
     }
@@ -2809,47 +2857,31 @@ class EditBox : EditWidgetBase {
 
     protected bool _enableScrollAfterText = true;
     override protected void ensureCaretVisible(bool center = false) {
-        if (_caretPos.line >= _content.length)
-            _caretPos.line = _content.length - 1;
+        if (_caretPos.line >= _span.length)
+            _caretPos.line = cast(int)_span.length - 1;
         if (_caretPos.line < 0)
             _caretPos.line = 0;
         int visibleLines = _lineHeight > 0 ? _clientRect.height / _lineHeight : 1; // fully visible lines
         if (visibleLines < 1)
             visibleLines = 1;
-        int maxFirstVisibleLine = _content.length - 1;
+        int maxFirstVisibleLine = cast(int)_span.length - 1;
         if (!_enableScrollAfterText)
-            maxFirstVisibleLine = _content.length - visibleLines;
+            maxFirstVisibleLine = cast(int)_span.length - visibleLines;
         if (maxFirstVisibleLine < 0)
             maxFirstVisibleLine = 0;
-
         if (_caretPos.line < _firstVisibleLine) {
             _firstVisibleLine = _caretPos.line;
             if (center) {
                 _firstVisibleLine -= visibleLines / 2;
-                if (_firstVisibleLine < 0)
+                if (_firstVisibleLine < 0) 
                     _firstVisibleLine = 0;
             }
-            if (_firstVisibleLine > maxFirstVisibleLine)
+            if (_firstVisibleLine > maxFirstVisibleLine) 
                 _firstVisibleLine = maxFirstVisibleLine;
             measureVisibleText();
             invalidate();
-        } else if(_wordWrap && !(_firstVisibleLine > maxFirstVisibleLine)) {
-            //For wordwrap mode, move down sooner
-            int offsetLines = -1 * caretHeightOffset / _lineHeight;
-            //Log.d("offsetLines: ", offsetLines);
-            if (_caretPos.line >= _firstVisibleLine + visibleLines - offsetLines)
-            {
-                _firstVisibleLine = _caretPos.line - visibleLines + 1 + offsetLines;
-                if (center)
-                    _firstVisibleLine += visibleLines / 2;
-                if (_firstVisibleLine > maxFirstVisibleLine)
-                    _firstVisibleLine = maxFirstVisibleLine;
-                if (_firstVisibleLine < 0)
-                    _firstVisibleLine = 0;
-                measureVisibleText();
-                invalidate();
-            }
-        } else if (_caretPos.line >= _firstVisibleLine + visibleLines) {
+        }
+        else if (_caretPos.line >= _firstVisibleLine + visibleLines) {
             _firstVisibleLine = _caretPos.line - visibleLines + 1;
             if (center)
                 _firstVisibleLine += visibleLines / 2;
@@ -2934,54 +2966,29 @@ class EditBox : EditWidgetBase {
 
     override protected bool handleAction(const Action a) {
         TextPosition oldCaretPos = _caretPos;
-        dstring currentLine = _content[_caretPos.line];
+        ////dstring currentLine = _content[_caretPos.line];
+        dstring currentLine = _span[_caretPos.line].content;
         switch (a.id) with(EditorActions)
         {
             case PrependNewLine:
                 if (!readOnly) {
                     correctCaretPos();
                     _caretPos.pos = 0;
-                    EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [""d, ""d]);
+                    EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [""d, ""d]);
                     _content.performOperation(op, this);
                 }
                 return true;
             case InsertNewLine:
                 if (!readOnly) {
                     correctCaretPos();
-                    EditOperation op = new EditOperation(EditAction.Replace, _selectionRange, [""d, ""d]);
+                    EditOperation op = new EditOperation(EditAction.Replace, spanTextRangeToContentTextRange(_selectionRange), [""d, ""d]);
                     _content.performOperation(op, this);
                 }
                 return true;
             case Up:
             case SelectUp:
-                if ((_caretPos.line > 0) | wordWrap) {
-                    if (_wordWrap)
-                    {
-                        LineSpan curSpan = getSpan(_caretPos.line);
-                        int curWrap = findWrapLine(_caretPos);
-                        if (curWrap > 0)
-                        {
-                            _caretPos.pos-= curSpan.wrapPoints[curWrap - 1].wrapPos;
-                        }
-                        else
-                        {
-                            int previousPos = _caretPos.pos;
-                            curSpan = getSpan(_caretPos.line - 1);
-                            curWrap = curSpan.len - 1;
-                            if (curWrap > 0)
-                            {
-                                int accumulativePoint = curSpan.accumulation(curSpan.len - 1, LineSpan.WrapPointInfo.Position);
-                                _caretPos.line--;
-                                _caretPos.pos = accumulativePoint + previousPos;
-                            }
-                            else
-                            {
-                                _caretPos.line--;
-                            }
-                        }
-                    }
-                    else if(_caretPos.line > 0)
-                        _caretPos.line--;
+                if (_caretPos.line > 0) {
+                     _caretPos.line--;
                      correctCaretPos();
                      updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                      ensureCaretVisible();
@@ -2989,38 +2996,8 @@ class EditBox : EditWidgetBase {
                 return true;
             case Down:
             case SelectDown:
-                if (_caretPos.line < _content.length - 1) {
-                    if (_wordWrap)
-                    {
-                        LineSpan curSpan = getSpan(_caretPos.line);
-                        int curWrap = findWrapLine(_caretPos);
-                        if (curWrap < curSpan.len - 1)
-                        {
-                            int previousPos = _caretPos.pos;
-                            _caretPos.pos+= curSpan.wrapPoints[curWrap].wrapPos;
-                            correctCaretPos();
-                            if (_caretPos.pos == previousPos)
-                            {
-                                _caretPos.pos = 0;
-                                _caretPos.line++;
-                            }
-                        }
-                        else if (curSpan.len > 1)
-                        {
-                            int previousPos = _caretPos.pos;
-                            int previousAccumulatedPosition = curSpan.accumulation(curSpan.len - 1, LineSpan.WrapPointInfo.Position);
-                            _caretPos.line++;
-                            _caretPos.pos = previousPos - previousAccumulatedPosition;
-                        }
-                        else
-                        {
-                            _caretPos.line++;
-                        }
-                    }
-                    else
-                    {
-                        _caretPos.line++;
-                    }
+                if (_caretPos.line < _span.length) {
+                    _caretPos.line++;
                     correctCaretPos();
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                     ensureCaretVisible();
@@ -3074,8 +3051,8 @@ class EditBox : EditWidgetBase {
                     ensureCaretVisible();
                     int fullLines = _clientRect.height / _lineHeight;
                     int newpos = _firstVisibleLine + fullLines;
-                    if (newpos >= _content.length) {
-                        _caretPos.line = _content.length - 1;
+                    if (newpos >= _span.length) {
+                        _caretPos.line = cast(int)_span.length - 1;
                     } else {
                         int delta = newpos - _firstVisibleLine;
                         _firstVisibleLine = newpos;
@@ -3139,10 +3116,10 @@ class EditBox : EditWidgetBase {
             case ScrollLineDown:
                 {
                     int fullLines = _clientRect.height / _lineHeight;
-                    if (_firstVisibleLine + fullLines < _content.length) {
+                    if (_firstVisibleLine + fullLines < _span.length) {
                         _firstVisibleLine += 3;
-                        if (_firstVisibleLine > _content.length - fullLines)
-                            _firstVisibleLine = _content.length - fullLines;
+                        if (_firstVisibleLine > _span.length - fullLines)
+                            _firstVisibleLine = cast(int)_span.length - fullLines;
                         if (_firstVisibleLine < 0)
                             _firstVisibleLine = 0;
                         measureVisibleText();
@@ -3154,10 +3131,10 @@ class EditBox : EditWidgetBase {
             case ScrollPageDown:
                 {
                     int fullLines = _clientRect.height / _lineHeight;
-                    if (_firstVisibleLine + fullLines < _content.length) {
+                    if (_firstVisibleLine + fullLines < _span.length) {
                         _firstVisibleLine += fullLines * 3 / 4;
-                        if (_firstVisibleLine > _content.length - fullLines)
-                            _firstVisibleLine = _content.length - fullLines;
+                        if (_firstVisibleLine > _span.length - fullLines)
+                            _firstVisibleLine = cast(int)_span.length - fullLines;
                         if (_firstVisibleLine < 0)
                             _firstVisibleLine = 0;
                         measureVisibleText();
@@ -3180,7 +3157,8 @@ class EditBox : EditWidgetBase {
                             Log.i("Font size in editor ", id, " zoomed to ", newFontSize);
                             fontSize = cast(ushort)newFontSize;
                             updateFontProps();
-                            _needRewrap = true;
+                            //_needRewrap = true;
+                            wrapContent();
                             measureVisibleText();
                             updateScrollBars();
                             invalidate();
@@ -3189,17 +3167,17 @@ class EditBox : EditWidgetBase {
                 }
                 return true;
             case ToggleBlockComment:
-                if (!readOnly && _content.syntaxSupport && _content.syntaxSupport.supportsToggleBlockComment && _content.syntaxSupport.canToggleBlockComment(_selectionRange))
-                    _content.syntaxSupport.toggleBlockComment(_selectionRange, this);
+                if (!readOnly && _content.syntaxSupport && _content.syntaxSupport.supportsToggleBlockComment && _content.syntaxSupport.canToggleBlockComment(spanTextRangeToContentTextRange(_selectionRange)))
+                    _content.syntaxSupport.toggleBlockComment(spanTextRangeToContentTextRange(_selectionRange), this);
                 return true;
             case ToggleLineComment:
-                if (!readOnly && _content.syntaxSupport && _content.syntaxSupport.supportsToggleLineComment && _content.syntaxSupport.canToggleLineComment(_selectionRange))
-                    _content.syntaxSupport.toggleLineComment(_selectionRange, this);
+                if (!readOnly && _content.syntaxSupport && _content.syntaxSupport.supportsToggleLineComment && _content.syntaxSupport.canToggleLineComment(spanTextRangeToContentTextRange(_selectionRange)))
+                    _content.syntaxSupport.toggleLineComment(spanTextRangeToContentTextRange(_selectionRange), this);
                 return true;
             case AppendNewLine:
                 if (!readOnly) {
                     correctCaretPos();
-                    TextPosition p = _content.lineEnd(_caretPos.line);
+                    TextPosition p = _content.lineEnd(spanTextPosToContentTextPos(_caretPos).line);
                     TextRange r = TextRange(p, p);
                     EditOperation op = new EditOperation(EditAction.Replace, r, [""d, ""d]);
                     _content.performOperation(op, this);
@@ -3210,7 +3188,7 @@ class EditBox : EditWidgetBase {
             case DeleteLine:
                 if (!readOnly) {
                     correctCaretPos();
-                    EditOperation op = new EditOperation(EditAction.Replace, _content.lineRange(_caretPos.line), [""d]);
+                    EditOperation op = new EditOperation(EditAction.Replace, _content.lineRange(spanTextPosToContentTextPos(_caretPos).line), [""d]);
                     _content.performOperation(op, this);
                 }
                 return true;
@@ -3235,7 +3213,7 @@ class EditBox : EditWidgetBase {
     /// calculate full content size in pixels
     override Point fullContentSize() {
         Point textSz;
-        textSz.y = _lineHeight * _content.length;
+        textSz.y = _lineHeight * cast(int)_span.length;
         textSz.x = _maxLineWidth;
         //int maxy = _lineHeight * 5; // limit measured height
         //if (textSz.y > maxy)
@@ -3243,18 +3221,19 @@ class EditBox : EditWidgetBase {
         return textSz;
     }
 
-    // override to set minimum scrollwidget size - default 100x100
-    override protected Point minimumVisibleContentSize() {
+    override void measureMinSize() {
         FontRef font = font();
         _measuredTextToSetWidgetSizeWidths.length = _textToSetWidgetSize.length;
         int charsMeasured = font.measureText(_textToSetWidgetSize, _measuredTextToSetWidgetSizeWidths, MAX_WIDTH_UNSPECIFIED, tabSize);
         _measuredTextToSetWidgetSize.x = charsMeasured > 0 ? _measuredTextToSetWidgetSizeWidths[charsMeasured - 1]: 0;
         _measuredTextToSetWidgetSize.y = font.height;
-        return _measuredTextToSetWidgetSize;
+        
+        Point sz = _measuredTextToSetWidgetSize;
+        adjustMeasuredMinSize(sz.x, sz.y);
     }
 
     /// measure
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         if (visibility == Visibility.Gone)
             return;
 
@@ -3262,24 +3241,25 @@ class EditBox : EditWidgetBase {
         updateMaxLineWidth();
         int findPanelHeight;
         if (_findPanel) {
-            _findPanel.measure(parentWidth, parentHeight);
+            _findPanel.measureSize(parentWidth, parentHeight);
             findPanelHeight = _findPanel.measuredHeight;
             if (parentHeight != SIZE_UNSPECIFIED)
                 parentHeight -= findPanelHeight;
         }
 
-        super.measure(parentWidth, parentHeight);
+        super.measureSize(parentWidth, parentHeight);
     }
 
 
     protected void highlightTextPattern(DrawBuf buf, int lineIndex, Rect lineRect, Rect visibleRect) {
-        dstring pattern = _textToHighlight;
+        // TODO (_content -> _span) not working now:
+        /*dstring pattern = _textToHighlight;
         uint options = _textToHighlightOptions;
         if (!pattern.length) {
             // support highlighting selection text - if whole word is selected
             if (_selectionRange.empty || !_selectionRange.singleLine)
                 return;
-            if (_selectionRange.start.line >= _content.length)
+            if (spanTextPosToContentTextPos(_selectionRange.start).line >= _content.length)
                 return;
             dstring selLine = _content.line(_selectionRange.start.line);
             int start = _selectionRange.start.pos;
@@ -3316,7 +3296,7 @@ class EditBox : EditWidgetBase {
                 highlightLineRange(buf, lineRect, color, r);
             }
             start += pattern.length;
-        }
+        }*/
     }
 
     static bool isWordChar(dchar ch) {
@@ -3352,8 +3332,8 @@ class EditBox : EditWidgetBase {
         bool caseSensitive = (options & TextSearchFlag.CaseSensitive) != 0;
         bool wholeWords = (options & TextSearchFlag.WholeWords) != 0;
         bool selectionOnly = (options & TextSearchFlag.SelectionOnly) != 0;
-        for (int i = 0; i < _content.length; i++) {
-            dstring lineText = _content.line(i);
+        for (int i = 0; i < _span.length; i++) {
+            dstring lineText = _span[i].content;
             if (lineText.length < pattern.length)
                 continue;
             ptrdiff_t start = 0;
@@ -3422,36 +3402,12 @@ class EditBox : EditWidgetBase {
         Rect rc = lineRect;
         rc.left = _clientRect.left + startrc.left;
         rc.right = _clientRect.left + endrc.right;
-        if (_wordWrap && !rc.empty)
-        {
-            wordWrapFillRect(buf, r.start.line, rc, color);
-        }
-        else if (!rc.empty) {
+        if (!rc.empty) {
             // draw selection rect for matching bracket
             buf.fillRect(rc, color);
         }
     }
     
-    /// Used in place of directly calling buf.fillRect in word wrap mode
-    void wordWrapFillRect(DrawBuf buf, int line, Rect lineToDivide, uint color)
-    {
-        Rect rc = lineToDivide;
-        auto limitNumber = (int num, int limit) => num > limit ? limit : num;
-        LineSpan curSpan = getSpan(line);
-        int yOffset = _lineHeight * (wrapsUpTo(line));
-        rc.offset(0, yOffset);
-        Rect[] wrappedSelection;
-        wrappedSelection.length = curSpan.len;
-        foreach (int i, wrapLineRect; wrappedSelection)
-        {
-            int startingDifference = rc.left - _clientRect.left;
-            wrapLineRect = rc;
-            wrapLineRect.offset(-1 * curSpan.accumulation(i, LineSpan.WrapPointInfo.Width), i * _lineHeight);
-            wrapLineRect.right = limitNumber(wrapLineRect.right,(rc.left + curSpan.wrapPoints[i].wrapWidth) - startingDifference);
-            buf.fillRect(wrapLineRect, color);
-        }
-    }
-
     /// override to custom highlight of line background
     protected void drawLineBackground(DrawBuf buf, int lineIndex, Rect lineRect, Rect visibleRect) {
         // highlight odd lines
@@ -3467,11 +3423,7 @@ class EditBox : EditWidgetBase {
             Rect rc = lineRect;
             rc.left = startx;
             rc.right = endx;
-            if (!rc.empty && _wordWrap)
-            {
-                wordWrapFillRect(buf, lineIndex, rc, focused ? _selectionColorFocused : _selectionColorNormal);
-            }
-            else if (!rc.empty) {
+            if (!rc.empty) {
                 // draw selection rect for line
                 buf.fillRect(rc, focused ? _selectionColorFocused : _selectionColorNormal);
             }
@@ -3489,10 +3441,9 @@ class EditBox : EditWidgetBase {
         }
 
         // frame around current line
+        ///// TODO: better check span
         if (focused && lineIndex == _caretPos.line && _selectionRange.singleLine && _selectionRange.start.line == _caretPos.line) {
             //TODO: Figure out why a little slow to catch up
-            if (_wordWrap)
-                visibleRect.offset(0, -caretHeightOffset);
             buf.drawFrame(visibleRect, 0xA0808080, Rect(1,1,1,1));
         }
 
@@ -3515,26 +3466,6 @@ class EditBox : EditWidgetBase {
                 break;
             drawLeftPane(buf, lineRect, i < lc ? i : -1);
             rc.top += _lineHeight;
-            if (_wordWrap)
-            {
-                int currentWrap = 1;
-                for (;;)
-                {
-                    LineSpan curSpan = getSpan(i);
-                    if (currentWrap > curSpan.len - 1)
-                        break;
-                    Rect lineRect2 = rc;
-                    lineRect2.left = _clientRect.left - _leftPaneWidth;
-                    lineRect2.right = _clientRect.left;
-                    lineRect2.bottom = lineRect.top + _lineHeight;
-                    if (lineRect2.top >= _clientRect.bottom)
-                        break;
-                    drawLeftPane(buf, lineRect2, -1);
-                    rc.top += _lineHeight;
-
-                    currentWrap++;
-                }
-            }
             i++;
         }
     }
@@ -3602,10 +3533,11 @@ class EditBox : EditWidgetBase {
 
     /// find max tab mark column position for line
     protected int findMaxTabMarkColumn(int lineIndex) {
-        if (lineIndex < 0 || lineIndex >= content.length)
+        // TODO (_content -> _span) not working now:
+        /*if (lineIndex < 0 || lineIndex >= span.length)
             return -1;
         int maxSpace = -1;
-        auto space = content.getLineWhiteSpace(lineIndex);
+        auto space = content.getLineWhiteSpace(span[lineIndex].contentLine);
         maxSpace = space.firstNonSpaceColumn;
         if (maxSpace >= 0)
             return maxSpace;
@@ -3624,7 +3556,8 @@ class EditBox : EditWidgetBase {
                 break;
             }
         }
-        return maxSpace;
+        return maxSpace;*/
+        return 0;
     }
 
     void drawTabPositionMarks(DrawBuf buf, ref FontRef font, int lineIndex, Rect lineRect) {
@@ -3715,7 +3648,6 @@ class EditBox : EditWidgetBase {
     }
     
     private bool _needRewrap = true;
-    private int lastStartingLine;
     
     override protected void drawClient(DrawBuf buf) {
         // update matched braces
@@ -3728,31 +3660,29 @@ class EditBox : EditWidgetBase {
         
         if (_contentChanged)
           _needRewrap = true;
-        if (lastStartingLine != _firstVisibleLine)
-        {
-            _needRewrap = true;
-            lastStartingLine = _firstVisibleLine;
-        }
         if (rc.width <= 0 && _wordWrap)
         {
             //Prevent drawClient from getting stuck in loop
             return;
         }
-        bool doRewrap = false;
+        //// bool doRewrap = false;
         if (_needRewrap && _wordWrap)
         {
-            resetVisibleSpans();
+            wrapContent();
+            measureVisibleText();
+            updateVScrollBar();
+            
             _needRewrap = false;
-            doRewrap = true;
+            ////doRewrap = true;
         }
-
         FontRef font = font();
-        int previousWraps;
+        ///int previousWraps;
+        ///Log.d("widoczne linie pierwsa ", _visibleLines[0]);
         for (int i = 0; i < _visibleLines.length; i++) {
             dstring txt = _visibleLines[i];
             Rect lineRect;
             lineRect.left = _clientRect.left - _scrollPos.x;
-            lineRect.right = lineRect.left + calcLineWidth(_content[_firstVisibleLine + i]);
+            lineRect.right = lineRect.left + calcLineWidth(_span[_firstVisibleLine + i].content);
             lineRect.top = _clientRect.top + i * _lineHeight;
             lineRect.bottom = lineRect.top + _lineHeight;
             Rect visibleRect = lineRect;
@@ -3767,11 +3697,6 @@ class EditBox : EditWidgetBase {
             {
                 Rect whiteSpaceRc = lineRect;
                 Rect whiteSpaceRcVisible = visibleRect;
-                for(int z; z < previousWraps; z++)
-                {
-                    whiteSpaceRc.offset(0, _lineHeight);
-                    whiteSpaceRcVisible.offset(0, _lineHeight);
-                }
                 drawWhiteSpaceMarks(buf, font, txt, tabSize, whiteSpaceRc, whiteSpaceRcVisible);
             }
             if (_leftPaneWidth > 0) {
@@ -3782,38 +3707,10 @@ class EditBox : EditWidgetBase {
             }
             if (txt.length > 0 || _wordWrap) {
                 CustomCharProps[] highlight = _visibleLinesHighlights[i];
-                if (_wordWrap)
-                {
-                    dstring[] wrappedLine;
-                    if (doRewrap)
-                        wrappedLine = wrapLine(txt, _firstVisibleLine + i);
-                    else
-                        if (i < _span.length)
-                            wrappedLine = _span[i].wrappedContent;
-                    int accumulativeLength;
-                    CustomCharProps[] wrapProps;
-                    foreach (int q, curWrap; wrappedLine)
-                    {
-                        auto lineOffset = q + i + wrapsUpTo(i + _firstVisibleLine);
-                        if (highlight)
-                        {
-                            wrapProps = highlight[accumulativeLength .. $];
-                            accumulativeLength += curWrap.length;
-                            font.drawColoredText(buf, rc.left - _scrollPos.x, rc.top + lineOffset * _lineHeight, curWrap, wrapProps, tabSize);
-                        }
-                        else
-                            font.drawText(buf, rc.left - _scrollPos.x, rc.top + lineOffset * _lineHeight, curWrap, textColor, tabSize);
-
-                    }
-                    previousWraps += to!int(wrappedLine.length - 1);
-                }
+                if (highlight)
+                    font.drawColoredText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, highlight, tabSize);
                 else
-                {
-                    if (highlight)
-                        font.drawColoredText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, highlight, tabSize);
-                    else
-                        font.drawText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, textColor, tabSize);
-                }
+                    font.drawText(buf, rc.left - _scrollPos.x, rc.top + i * _lineHeight, txt, textColor, tabSize);
             }
         }
 
@@ -3974,7 +3871,7 @@ class LogWidget : EditBox {
         dstring[] lines = text.split("\n");
         //lines ~= ""d; // append new line after last line
         content.appendLines(lines);
-        if (_maxLines > 0 && lineCount > _maxLines) {
+        if (_maxLines > 0 && _content.length > _maxLines) {
             TextRange range;
             range.end.line = lineCount - _maxLines;
             EditOperation op = new EditOperation(EditAction.Replace, range, [""d]);
@@ -3996,7 +3893,7 @@ class LogWidget : EditBox {
             res.line = _content.length - 2;
         else
             res.line = _content.length - 1;
-        return res;
+        return contentTextPosToSpanTextPos(res);
     }
 
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).

@@ -272,7 +272,7 @@ class DockHost : WidgetGroupDefaultDrawing {
     }
 
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measure(int parentWidth, int parentHeight) {
+    override void measureSize(int parentWidth, int parentHeight) {
         Rect m = margins;
         Rect p = padding;
         // calc size constraints for children
@@ -286,7 +286,7 @@ class DockHost : WidgetGroupDefaultDrawing {
         Point sz;
         Point bodySize;
         if (_bodyWidget) {
-            _bodyWidget.measure(pwidth, pheight);
+            _bodyWidget.measureSize(pwidth, pheight);
             bodySize.x = _bodyWidget.measuredWidth;
             bodySize.y = _bodyWidget.measuredHeight;
         }
@@ -294,14 +294,14 @@ class DockHost : WidgetGroupDefaultDrawing {
             Widget item = _children.get(i);
             // TODO: fix
             if (item.visibility != Visibility.Gone) {
-                item.measure(pwidth, pheight);
+                item.measureSize(pwidth, pheight);
                 if (sz.x < item.measuredWidth)
                     sz.x = item.measuredWidth;
                 if (sz.y < item.measuredHeight)
                     sz.y = item.measuredHeight;
             }
         }
-        measuredContent(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
     }
 }
 
