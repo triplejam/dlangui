@@ -111,14 +111,18 @@ class PopupWidget : LinearLayout {
         }
         int w = measuredWidth;
         int h = measuredHeight;
+
         if (w > rc.width)
             w = rc.width;
         if (h > rc.height)
             h = rc.height;
 
         Rect anchorrc;
-        if (anchor.widget !is null)
+        if (anchor.widget !is null) {
             anchorrc = anchor.widget.pos;
+            anchorrc.left += anchor.widget.margins.left;
+            anchorrc.right -= anchor.widget.margins.right;
+        }
         else
             anchorrc = rc;
 
@@ -156,6 +160,7 @@ class PopupWidget : LinearLayout {
                 if (w < anchorrc.width)
                     w = anchorrc.width;
         }
+
         r.right = r.left + w;
         r.bottom = r.top + h;
         r.moveToFit(rc);
