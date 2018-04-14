@@ -911,6 +911,15 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         // TODO
     }
 
+    /// sets default popup menu with copy/paste/cut/undo/redo
+    EditWidgetBase setDefaultPopupMenu() {
+        MenuItem items = new MenuItem();
+        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT,
+                  ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
+        popupMenu = items;
+        return this;
+    }
+
     /// returns mouse cursor type for widget
     override uint getCursorType(int x, int y) {
         return x < _pos.left + _leftPaneWidth ? CursorType.Arrow : CursorType.IBeam;
@@ -2318,14 +2327,6 @@ class EditLine : EditWidgetBase {
         onThemeChanged();
     }
 
-    /// sets default popup menu with copy/paste/cut/undo/redo
-    EditLine setDefaultPopupMenu() {
-        MenuItem items = new MenuItem();
-        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT,
-                  ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
-        popupMenu = items;
-        return this;
-    }
 
     protected dstring _measuredText;
     protected int[] _measuredTextWidths;
