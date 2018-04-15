@@ -100,10 +100,15 @@ class PopupWidget : LinearLayout {
 
     /// just call on close listener
     void onClose() {
+        if (widgetToReturnFocus && widgetToReturnFocus.canFocus)
+            widgetToReturnFocus.setFocus();
         if (popupClosed.assigned)
             popupClosed(this);
     }
 
+    /// This widget will get focus when popup will be closed inside
+    Widget widgetToReturnFocus = null;
+    
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
         if (visibility == Visibility.Gone) {
@@ -179,6 +184,8 @@ class PopupWidget : LinearLayout {
         if (visibility != Visibility.Visible)
             return false;
         if (_flags & PopupFlags.CloseOnClickOutside) {
+            if (event.action == MouseAction.ButtonDown) 
+                return true;
             if (event.action == MouseAction.ButtonUp) {
                 // clicked outside - close popup
                 close();
@@ -191,7 +198,7 @@ class PopupWidget : LinearLayout {
                 if (event.x < _pos.left - threshold || event.x > _pos.right + threshold || event.y < _pos.top - threshold || event.y > _pos.bottom + threshold) {
                     Log.d("Closing popup due to PopupFlags.CloseOnMouseMoveOutside flag");
                     close();
-                    return false;
+                    return true;
                 }
             }
         }

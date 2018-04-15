@@ -903,8 +903,16 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _popupMenu.updateActionState(this);
         PopupMenu popupMenu = new PopupMenu(_popupMenu);
         popupMenu.menuItemAction = this;
+        
+        // disable _deselectAllWhenUnfocused when show popup to cut/copy/paste work properly
+        bool oldDeselectAllWhenUnfocused = _deselectAllWhenUnfocused;
+        if (_deselectAllWhenUnfocused)
+            _deselectAllWhenUnfocused = false;
         PopupWidget popup = window.showPopup(popupMenu, this, PopupAlign.Point | PopupAlign.Right, x, y);
         popup.flags = PopupFlags.CloseOnClickOutside;
+        popup.setFocus();
+        popup.widgetToReturnFocus = this;
+        _deselectAllWhenUnfocused = oldDeselectAllWhenUnfocused;
     }
 
     void onPopupMenuItem(MenuItem item) {
@@ -2224,6 +2232,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             startCaretBlinking();
             invalidate();
             return true;
+        }
+        if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Right) {
+            if (canFocus)
+                setFocus(FocusReason.TabFocus);
+            if (canShowPopupMenu(event.x, event.y)) {
+                showPopupMenu(event.x, event.y);
+                return true;
+            }
         }
         if (event.action == MouseAction.Move && (event.flags & MouseButton.Left) != 0) {
             updateCaretPositionByMouse(event.x - _clientRect.left, event.y - _clientRect.top, true);

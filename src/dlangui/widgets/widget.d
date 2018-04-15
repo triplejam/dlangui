@@ -1318,6 +1318,10 @@ public:
             setFocus();
             return true;
         }
+        if (canFocus && event.action == MouseAction.SetFocus) {
+            setFocus();
+            return true;
+        }
         if (trackHover) {
             if (event.action == MouseAction.FocusOut || event.action == MouseAction.Cancel) {
                 if ((state & State.Hovered)) {

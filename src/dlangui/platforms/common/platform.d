@@ -1518,10 +1518,9 @@ class Window : CustomEventTarget {
                 if (p is modal)
                     break;
                 if (!insideOneOfPopups) {
-                    if (event.action == MouseAction.ButtonDown)
-                        return true; // mouse button down should do nothing when click outside when popup visible
                     if (p.onMouseEventOutside(event)) {
-                        return true; // mouse button up should do nothing when click outside when popup visible
+                        // click should not change anything, but set focus
+                        event.changeAction(MouseAction.SetFocus);
                     }
                 } else {
                     if (dispatchMouseEvent(p, event, cursorIsSet))

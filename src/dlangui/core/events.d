@@ -704,7 +704,9 @@ enum MouseAction : ubyte {
     Wheel,
     //Hover,    // pointer entered widget which while button was not down (return true to track Hover state)
     /// pointer left widget which has before processed Move message, while button was not down
-    Leave
+    Leave,
+    /// just set focus to widget, nothing more
+    SetFocus
 }
 
 /// Mouse flag bits (mouse buttons and keyboard modifiers) for MouseEvent
