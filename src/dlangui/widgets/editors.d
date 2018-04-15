@@ -1572,6 +1572,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             updateSelectionAfterCursorMovement(oldCaretPos, selecting);
             invalidate();
         }
+        else if (!selecting) {
+            _selectionRange.start = _caretPos;
+            _selectionRange.end = _caretPos;
+            invalidate();
+        }
+        
         handleEditorStateChange();
     }
 
