@@ -1307,6 +1307,8 @@ public:
             scheduleTooltip(200);
         }
         if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Right) {
+            if (canFocus)
+                setFocus(FocusReason.TabFocus);
             if (canShowPopupMenu(event.x, event.y)) {
                 showPopupMenu(event.x, event.y);
                 return true;
