@@ -1372,8 +1372,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 _selectionRange.end = _caretPos;
             }
         }
-        if(focused && _selectAllWhenFocusedWithTab && receivedFocusFromKeyboard)
+        if(focused && _selectAllWhenFocusedWithTab && receivedFocusFromKeyboard) {
             handleAction(ACTION_EDITOR_SELECT_ALL);
+            resetState(State.KeyboardFocused);
+        }
         super.handleFocusChange(focused);
     }
 
