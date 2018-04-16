@@ -240,7 +240,7 @@ const Action ACTION_EDITOR_PREPEND_NEW_LINE = (new Action(EditorActions.PrependN
 const Action ACTION_EDITOR_APPEND_NEW_LINE = (new Action(EditorActions.AppendNewLine, KeyCode.RETURN, KeyFlag.Control, ActionStateUpdateFlag.never));
 const Action ACTION_EDITOR_DELETE_LINE = (new Action(EditorActions.DeleteLine, KeyCode.KEY_D, KeyFlag.Control, ActionStateUpdateFlag.never)).addAccelerator(KeyCode.KEY_L, KeyFlag.Control);
 const Action ACTION_EDITOR_TOGGLE_REPLACE_MODE = (new Action(EditorActions.ToggleReplaceMode, KeyCode.INS, 0, ActionStateUpdateFlag.never));
-const Action ACTION_EDITOR_SELECT_ALL = (new Action(EditorActions.SelectAll, KeyCode.KEY_A, KeyFlag.Control, ActionStateUpdateFlag.never));
+const Action ACTION_EDITOR_SELECT_ALL = (new Action(EditorActions.SelectAll, "MENU_EDIT_SELECT_ALL"c, null, KeyCode.KEY_A, KeyFlag.Control));
 const Action ACTION_EDITOR_TOGGLE_LINE_COMMENT = (new Action(EditorActions.ToggleLineComment, KeyCode.KEY_DIVIDE, KeyFlag.Control));
 const Action ACTION_EDITOR_TOGGLE_BLOCK_COMMENT = (new Action(EditorActions.ToggleBlockComment, KeyCode.KEY_DIVIDE, KeyFlag.Control | KeyFlag.Shift));
 const Action ACTION_EDITOR_TOGGLE_BOOKMARK = (new Action(EditorActions.ToggleBookmark, "ACTION_EDITOR_TOGGLE_BOOKMARK"c, null, KeyCode.KEY_B, KeyFlag.Control | KeyFlag.Shift));
@@ -919,11 +919,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         // TODO
     }
 
-    /// sets default popup menu with copy/paste/cut/undo/redo
+    /// sets default popup menu with copy/paste/cut/select all/undo/redo
     EditWidgetBase setDefaultPopupMenu() {
         MenuItem items = new MenuItem();
-        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT,
-                  ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
+        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT);
+        items.addSeparator();
+        items.add(ACTION_EDITOR_SELECT_ALL);
+        items.addSeparator();
+        items.add(ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
         popupMenu = items;
         return this;
     }
