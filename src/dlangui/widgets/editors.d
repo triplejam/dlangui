@@ -240,7 +240,7 @@ const Action ACTION_EDITOR_PREPEND_NEW_LINE = (new Action(EditorActions.PrependN
 const Action ACTION_EDITOR_APPEND_NEW_LINE = (new Action(EditorActions.AppendNewLine, KeyCode.RETURN, KeyFlag.Control, ActionStateUpdateFlag.never));
 const Action ACTION_EDITOR_DELETE_LINE = (new Action(EditorActions.DeleteLine, KeyCode.KEY_D, KeyFlag.Control, ActionStateUpdateFlag.never)).addAccelerator(KeyCode.KEY_L, KeyFlag.Control);
 const Action ACTION_EDITOR_TOGGLE_REPLACE_MODE = (new Action(EditorActions.ToggleReplaceMode, KeyCode.INS, 0, ActionStateUpdateFlag.never));
-const Action ACTION_EDITOR_SELECT_ALL = (new Action(EditorActions.SelectAll, KeyCode.KEY_A, KeyFlag.Control, ActionStateUpdateFlag.never));
+const Action ACTION_EDITOR_SELECT_ALL = (new Action(EditorActions.SelectAll, "MENU_EDIT_SELECT_ALL"c, null, KeyCode.KEY_A, KeyFlag.Control));
 const Action ACTION_EDITOR_TOGGLE_LINE_COMMENT = (new Action(EditorActions.ToggleLineComment, KeyCode.KEY_DIVIDE, KeyFlag.Control));
 const Action ACTION_EDITOR_TOGGLE_BLOCK_COMMENT = (new Action(EditorActions.ToggleBlockComment, KeyCode.KEY_DIVIDE, KeyFlag.Control | KeyFlag.Shift));
 const Action ACTION_EDITOR_TOGGLE_BOOKMARK = (new Action(EditorActions.ToggleBookmark, "ACTION_EDITOR_TOGGLE_BOOKMARK"c, null, KeyCode.KEY_B, KeyFlag.Control | KeyFlag.Shift));
@@ -903,12 +903,32 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         _popupMenu.updateActionState(this);
         PopupMenu popupMenu = new PopupMenu(_popupMenu);
         popupMenu.menuItemAction = this;
+        
+        // disable _deselectAllWhenUnfocused when show popup to cut/copy/paste work properly
+        bool oldDeselectAllWhenUnfocused = _deselectAllWhenUnfocused;
+        if (_deselectAllWhenUnfocused)
+            _deselectAllWhenUnfocused = false;
         PopupWidget popup = window.showPopup(popupMenu, this, PopupAlign.Point | PopupAlign.Right, x, y);
         popup.flags = PopupFlags.CloseOnClickOutside;
+        popup.setFocus();
+        popup.widgetToReturnFocus = this;
+        _deselectAllWhenUnfocused = oldDeselectAllWhenUnfocused;
     }
 
     void onPopupMenuItem(MenuItem item) {
         // TODO
+    }
+
+    /// sets default popup menu with copy/paste/cut/select all/undo/redo
+    EditWidgetBase setDefaultPopupMenu() {
+        MenuItem items = new MenuItem();
+        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT);
+        items.addSeparator();
+        items.add(ACTION_EDITOR_SELECT_ALL);
+        items.addSeparator();
+        items.add(ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
+        popupMenu = items;
+        return this;
     }
 
     /// returns mouse cursor type for widget
@@ -1355,8 +1375,10 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 _selectionRange.end = _caretPos;
             }
         }
-        if(focused && _selectAllWhenFocusedWithTab && receivedFocusFromKeyboard)
+        if(focused && _selectAllWhenFocusedWithTab && receivedFocusFromKeyboard) {
             handleAction(ACTION_EDITOR_SELECT_ALL);
+            resetState(State.KeyboardFocused);
+        }
         super.handleFocusChange(focused);
     }
 
@@ -1555,6 +1577,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             updateSelectionAfterCursorMovement(oldCaretPos, selecting);
             invalidate();
         }
+        else if (!selecting) {
+            _selectionRange.start = _caretPos;
+            _selectionRange.end = _caretPos;
+            invalidate();
+        }
+        
         handleEditorStateChange();
     }
 
@@ -2216,6 +2244,14 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             invalidate();
             return true;
         }
+        if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Right) {
+            if (canFocus)
+                setFocus(FocusReason.TabFocus);
+            if (canShowPopupMenu(event.x, event.y)) {
+                showPopupMenu(event.x, event.y);
+                return true;
+            }
+        }
         if (event.action == MouseAction.Move && (event.flags & MouseButton.Left) != 0) {
             updateCaretPositionByMouse(event.x - _clientRect.left, event.y - _clientRect.top, true);
             return true;
@@ -2318,14 +2354,6 @@ class EditLine : EditWidgetBase {
         onThemeChanged();
     }
 
-    /// sets default popup menu with copy/paste/cut/undo/redo
-    EditLine setDefaultPopupMenu() {
-        MenuItem items = new MenuItem();
-        items.add(ACTION_EDITOR_COPY, ACTION_EDITOR_PASTE, ACTION_EDITOR_CUT,
-                  ACTION_EDITOR_UNDO, ACTION_EDITOR_REDO);
-        popupMenu = items;
-        return this;
-    }
 
     protected dstring _measuredText;
     protected int[] _measuredTextWidths;
