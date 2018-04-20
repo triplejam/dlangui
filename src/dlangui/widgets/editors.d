@@ -424,10 +424,11 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
     /// Characters at which content is split for word wrap mode
     dchar[] splitChars = [' ', '-', '\t'];
     
-    /// Divides up a string for word wrapping, sets info in _span
-    void wrapLine(dstring str, int lineNumber) {
+    /// Divides up a string for word wrapping, sets info in spans
+    void wrapLine(int lineNumber, ref LineSpan[] spans) {
+        dstring str = content.lines[lineNumber];
         if (!str.length) {
-            _span ~= LineSpan(lineNumber, -1, -1, ""d);
+            spans ~= LineSpan(lineNumber, -1, -1, ""d);
             //Log.d("span0  ", LineSpan(lineNumber, -1, -1, ""d));
             return;
         }
@@ -446,7 +447,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             {
                 if (curLineWidth > 0)
                 {
-                    _span ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1 , to!dstring(buildingStr));
+                    spans ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1 , to!dstring(buildingStr));
                     //Log.d("span1  ", LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length -1, to!dstring(buildingStr)));
                     curLineWidth = 0;
                     firstCharIndex = firstCharIndex + cast(int)buildingStr.length;
@@ -459,7 +460,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     buildingStr ~= word[0 .. wrapPoint];
                     word = word[wrapPoint .. $];
                     lastCharIndex = firstCharIndex + cast(int)buildingStr.length -1;
-                    _span ~= LineSpan(lineNumber, firstCharIndex, lastCharIndex, to!dstring(buildingStr));
+                    spans ~= LineSpan(lineNumber, firstCharIndex, lastCharIndex, to!dstring(buildingStr));
                     //Log.d("span2  ", LineSpan(lineNumber, firstCharIndex, lastCharIndex, to!dstring(buildingStr)));
                     
                     firstCharIndex = lastCharIndex + 1;
@@ -472,7 +473,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             curLineWidth += measureWrappedText(word);
         }
         
-        _span ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length - 1, to!dstring(buildingStr));
+        spans ~= LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length - 1, to!dstring(buildingStr));
         ////Log.d("span3  ", LineSpan(lineNumber, firstCharIndex, firstCharIndex + cast(int)buildingStr.length - 1, to!dstring(buildingStr)));
     }
 
@@ -510,11 +511,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
         }
     }
 
+    private Rect _lastWrapForPos;
     void wrapContent() {
         _span = [];
         if (_wordWrap && _clientRect.width > 0) {
             for(int i = 0 ; i< content.lines.length ; i++) {
-                wrapLine(content.lines[i], i);
+                wrapLine(i, _span);
             }
         }
         else
@@ -525,6 +527,157 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     _span ~= LineSpan(i, -1, -1, ""d);
             }
         correctCaretPos();
+        _lastWrapForPos = _pos;
+    }
+
+    void updateSpans(EditOperation operation, ref TextRange rangeBefore, ref TextRange rangeAfter) {
+
+        if (rangeBefore.start.line == rangeAfter.start.line && rangeBefore.end.line == rangeAfter.end.line) {
+            
+            // only update no new lines added / deleted
+            for (int i = rangeBefore.start.line ; i<= rangeBefore.end.line ; i++) {
+                updateSpanOfContentLine(i);
+            }
+        }
+        else {
+            // delete old spans and insert new spans
+            int insertNewIndex;
+            for (int i = rangeBefore.end.line ; i >= rangeBefore.start.line ; i--) {
+                if (i == rangeBefore.start.line)
+                    insertNewIndex = deleteSpansOfContentLine(i);
+                else
+                    deleteSpansOfContentLine(i);
+            }
+
+            for (int i = rangeAfter.start.line ; i <= rangeAfter.end.line ; i++) {
+                insertNewIndex = insertSpansOfContentLine(i, insertNewIndex);
+            }
+        }
+    }
+
+    void updateSpanOfContentLine(int contentLine) {
+        if (contentLine > _span.length) {
+            Log.e("Span update bug!");
+            return;
+        }
+
+        if (!wordWrap) {
+             if (content.lines[contentLine].length > 0)
+                _span[contentLine] = LineSpan(contentLine, 0, cast(int)content.lines[contentLine].length-1, content.lines[contentLine]);
+            else
+                _span[contentLine] = LineSpan(contentLine, -1, -1, ""d);
+            return;
+        }
+
+        int firstSpan = -1;
+        int lastSpan = -1;
+        // search spans
+        for (int i = contentLine ; i < _span.length ; i++) {
+            if (_span[i].contentLine == contentLine) {
+                if (firstSpan == -1)
+                    firstSpan = i;
+            }
+            else
+                if (firstSpan != -1) {
+                    lastSpan = i-1;
+                    break;
+                }
+
+        }
+        if (lastSpan == -1)
+            lastSpan = cast(int)_span.length - 1;
+
+        LineSpan[] spanBuff;
+        wrapLine(contentLine, spanBuff);
+
+        int oldSpansCount = lastSpan - firstSpan + 1;
+        if (oldSpansCount == spanBuff.length) {
+            for (int i = firstSpan ; i <= lastSpan ; i++) {
+                _span[i] = spanBuff[i - firstSpan];
+            }
+
+        } 
+        else if (oldSpansCount > spanBuff.length) {
+            for (int i = firstSpan ; i <= lastSpan - (oldSpansCount - spanBuff.length)  ; i++) {
+                _span[i] = spanBuff[i - firstSpan];
+            }
+            import std.typecons: tuple;
+            _span = _span.remove(tuple(firstSpan+spanBuff.length, lastSpan +1));
+        } 
+        else {
+            for (int i = firstSpan ; i <= lastSpan ; i++) {
+                _span[i] = spanBuff[i - firstSpan];
+            }
+
+            import std.array : insertInPlace;
+            for(int i = cast(int)spanBuff.length - oldSpansCount ; i > 0 ; i--) {
+                _span.insertInPlace(lastSpan+1, spanBuff[oldSpansCount + i -1]);
+            }
+        }
+    }
+
+    int deleteSpansOfContentLine(int contentLine) {
+        if (contentLine > _span.length) {
+            Log.e("Span update bug!");
+            return 0;
+        }
+
+        if (!wordWrap) {
+            _span = _span.remove(contentLine);
+            return contentLine;
+        }
+
+        int firstSpan = -1;
+        int lastSpan = -1;
+        // search spans
+        for (int i = contentLine ; i < _span.length ; i++) {
+            if (_span[i].contentLine == contentLine) {
+                if (firstSpan == -1)
+                    firstSpan = i;
+            }
+            else
+                if (firstSpan != -1) {
+                    lastSpan = i-1;
+                    break;
+                }
+
+        }
+        if (lastSpan == -1)
+            lastSpan = cast(int)_span.length - 1;
+
+        //remove 
+        import std.typecons: tuple;
+        if (firstSpan == lastSpan)
+            _span = _span.remove(firstSpan);
+        else
+            _span = _span.remove(tuple(firstSpan, lastSpan +1));
+
+        return firstSpan;
+
+    }
+
+
+    int insertSpansOfContentLine(int contentLine, int insertNewIndex) {
+        import std.array : insertInPlace;
+
+        if (!wordWrap) {
+             if (content.lines[contentLine].length > 0)
+                _span.insertInPlace(insertNewIndex, LineSpan(contentLine, 0, cast(int)content.lines[contentLine].length-1, content.lines[contentLine]));
+            else
+                _span.insertInPlace(insertNewIndex, LineSpan(contentLine, -1, -1, ""d));
+
+            return insertNewIndex + 1;
+        }
+
+        LineSpan[] spanBuff;
+        wrapLine(contentLine, spanBuff);
+
+
+        for(int i = cast(int)spanBuff.length; i > 0 ; i--) {
+            _span.insertInPlace(insertNewIndex, spanBuff[i -1]);
+        }
+
+        return insertNewIndex + cast(int)spanBuff.length;
     }
     
     /// An array in which edit stores data adapted to display.
@@ -1231,7 +1384,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 // saved
             } else {
                 // modified
-                wrapContent(); // TODO: optimize do not make all spans only change modified
+                updateSpans(operation, rangeBefore, rangeAfter);
                 _caretPos = contentTextPosToSpanTextPos(rangeAfter.end);
                 _selectionRange.start = _caretPos;
                 _selectionRange.end = _caretPos;
@@ -1242,7 +1395,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                 processSmartIndent(operation);
             }
         } else {
-            wrapContent(); // TODO: optimize do not make all spans only change modified
+            wrapContent(); // TODO: maybe here should be changed to updateSpans() too.
             updateMaxLineWidth();
             measureVisibleText();
             correctCaretPos();
@@ -1730,7 +1883,7 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
                     _caretPos.pos++;
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
                     ensureCaretVisible();
-                } else if (_caretPos.line < _span.length && _content.multiline) {
+                } else if (_caretPos.line < _span.length - 1 && _content.multiline) {
                     _caretPos.pos = 0;
                     _caretPos.line++;
                     updateSelectionAfterCursorMovement(oldCaretPos, (a.id & 1) != 0);
@@ -2698,6 +2851,7 @@ class EditBox : EditWidgetBase {
 
         if (rc != _pos)
             _contentChanged = true;
+
         Rect contentRc = rc;
         int findPanelHeight;
         if (_findPanel && _findPanel.visibility != Visibility.Gone) {
@@ -2708,12 +2862,15 @@ class EditBox : EditWidgetBase {
         }
 
         super.layout(contentRc);
-        if (_contentChanged) {
-            measureVisibleText();
+        
+        if (rc != _lastWrapForPos) {
             _needRewrap = true;
-            _contentChanged = false;
         }
 
+        if (_contentChanged) {
+            measureVisibleText();
+            _contentChanged = false;
+        }
         _pos = rc;
     }
 
@@ -2926,19 +3083,22 @@ class EditBox : EditWidgetBase {
             measureVisibleText();
             invalidate();
         }
+        
         //_scrollPos
-        Rect rc = textPosToClient(_caretPos);
-        if (rc.left < 0) {
-            // scroll left
-            _scrollPos.x -= -rc.left + _clientRect.width / 4;
-            if (_scrollPos.x < 0)
-                _scrollPos.x = 0;
-            invalidate();
-        } else if (rc.left >= _clientRect.width - 10) {
-            // scroll right
-            if (!_wordWrap)
-                _scrollPos.x += (rc.left - _clientRect.width) + _clientRect.width / 4;
-            invalidate();
+        if (!_wordWrap) {
+            Rect rc = textPosToClient(_caretPos);
+            if (rc.left < 0) {
+                // scroll left
+                _scrollPos.x -= -rc.left + _clientRect.width / 4;
+                if (_scrollPos.x < 0)
+                    _scrollPos.x = 0;
+                invalidate();
+            } else if (rc.left >= _clientRect.width - 10) {
+                // scroll right
+                if (!_wordWrap)
+                    _scrollPos.x += (rc.left - _clientRect.width) + _clientRect.width / 4;
+                invalidate();
+            }
         }
         updateScrollBars();
         handleEditorStateChange();
@@ -3686,8 +3846,10 @@ class EditBox : EditWidgetBase {
 
         Rect rc = _clientRect;
         
-        if (_contentChanged)
-          _needRewrap = true;
+        /*if (_contentChanged) {
+            _needRewrap = true;
+            _contentChanged = false;
+        }*/
         if (rc.width <= 0 && _wordWrap)
         {
             //Prevent drawClient from getting stuck in loop
@@ -3701,11 +3863,8 @@ class EditBox : EditWidgetBase {
             updateVScrollBar();
             
             _needRewrap = false;
-            ////doRewrap = true;
         }
         FontRef font = font();
-        ///int previousWraps;
-        ///Log.d("widoczne linie pierwsa ", _visibleLines[0]);
         for (int i = 0; i < _visibleLines.length; i++) {
             dstring txt = _visibleLines[i];
             Rect lineRect;
