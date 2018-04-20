@@ -659,6 +659,12 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
 
     /// update contentLine in span after remove/add new lines
     void updateContentLineIndexInSpans() {
+        if (!wordWrap) {
+            for (size_t i = 0 ; i < _span.length ; i++) 
+                _span[i].contentLine = cast(int)i;
+            return;
+        }
+        
         int lastLineNumber = 0;
         int changedLineNumber = -1;
         bool wasNumber = false;
