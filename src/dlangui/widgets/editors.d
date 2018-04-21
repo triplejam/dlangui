@@ -552,6 +552,8 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             for (int i = rangeAfter.start.line ; i <= rangeAfter.end.line ; i++) {
                 insertNewIndex = insertSpansOfContentLine(i, insertNewIndex);
             }
+
+            updateContentLineIndexInSpans();
         }
     }
 
@@ -653,7 +655,53 @@ class EditWidgetBase : ScrollWidgetBase, EditableContentListener, MenuItemAction
             _span = _span.remove(tuple(firstSpan, lastSpan +1));
 
         return firstSpan;
+    }
 
+    /// update contentLine in span after remove/add new lines
+    void updateContentLineIndexInSpans() {
+        if (!wordWrap) {
+            for (size_t i = 0 ; i < _span.length ; i++) 
+                _span[i].contentLine = cast(int)i;
+            return;
+        }
+        
+        int lastLineNumber = 0;
+        int changedLineNumber = -1;
+        bool wasNumber = false;
+        for (size_t i = 0 ; i < _span.length ; i++) {
+            if (!wasNumber) {
+                if (_span[i].contentLine != lastLineNumber) {
+                    changedLineNumber = _span[i].contentLine;
+                    _span[i].contentLine = lastLineNumber;
+                    wasNumber = true;
+                    continue;
+                }
+                else {
+                    changedLineNumber = _span[i].contentLine;
+                    wasNumber = true;
+                }
+            }
+            else {
+                // was number
+                if (_span[i].contentLine == changedLineNumber) {
+                    if (_span[i].firstCharIndex == 0 || _span[i].firstCharIndex == -1) {
+                        // the same content line but not from this line so we need increase line number
+                        ++lastLineNumber;
+                        _span[i].contentLine = lastLineNumber;
+                    }
+                    else {
+                        // that the same line
+                        _span[i].contentLine = lastLineNumber;
+                    }
+                }
+                else {
+                    // new line
+                    ++lastLineNumber;
+                    changedLineNumber = _span[i].contentLine;
+                    _span[i].contentLine = lastLineNumber;
+                }
+            }
+        }
     }
 
 

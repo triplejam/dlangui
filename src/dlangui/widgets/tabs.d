@@ -918,6 +918,10 @@ class TabHost : FrameLayout, TabHandler {
 //        Log.d("after layout(): needLayout = ", needLayout);
 //    }
 
+    override void measureSize(int parentWidth, int parentHeight) {
+        super.measureSize(parentWidth, parentHeight  - _tabControl.measuredHeight);
+    }
+
 }
 
 
