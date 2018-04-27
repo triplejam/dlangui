@@ -286,6 +286,7 @@ class DockHost : WidgetGroupDefaultDrawing {
         Point sz;
         Point bodySize;
         if (_bodyWidget) {
+            _bodyWidget.measureMinSize();
             _bodyWidget.measureSize(pwidth, pheight);
             bodySize.x = _bodyWidget.measuredWidth;
             bodySize.y = _bodyWidget.measuredHeight;
