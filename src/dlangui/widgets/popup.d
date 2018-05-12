@@ -64,7 +64,7 @@ interface OnPopupCloseHandler {
 }
 
 /// popup widget container
-class PopupWidget : LinearLayout {
+class PopupWidget : WidgetGroupDefaultDrawing {
     protected PopupAnchor _anchor;
     protected bool _modal;
 
@@ -89,9 +89,37 @@ class PopupWidget : LinearLayout {
     /// set modality flag
     PopupWidget modal(bool modal) { _modal = modal; return this; }
 
+
+    override void measureMinSize() {
+        if (childCount > 0) {
+            child(0).measureMinSize();
+            adjustMeasuredMinSize(child(0).measuredMinWidth, child(0).measuredMinHeight);
+        }
+        else {
+            adjustMeasuredMinSize(0,0);
+        }
+    }
+    
     /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
     override void measureSize(int parentWidth, int parentHeight) {
-        super.measureSize(parentWidth, parentHeight);
+        if (childCount > 0) {
+
+            Rect m = margins;
+            Rect p = padding;
+
+            // calc size constraints for children
+            int pwidth = parentWidth;
+            int pheight = parentHeight;
+            if (parentWidth != SIZE_UNSPECIFIED)
+                pwidth -= m.left + m.right + p.left + p.right;
+            if (parentHeight != SIZE_UNSPECIFIED)
+                pheight -= m.top + m.bottom + p.top + p.bottom;
+            
+            child(0).measureSize(pwidth, pheight);
+            adjustMeasuredSize(parentWidth, parentHeight, child(0).measuredWidth, child(0).measuredHeight);
+        }
+        else
+            adjustMeasuredSize(parentWidth, parentHeight, 0, 0);
     }
     /// close and destroy popup
     void close() {
@@ -169,6 +197,12 @@ class PopupWidget : LinearLayout {
         r.right = r.left + w;
         r.bottom = r.top + h;
         r.moveToFit(rc);
+        if (childCount > 0) {
+            Rect rch = r;
+            applyMargins(rch);
+            applyPadding(rch);
+            child(0).layout(rch);
+        }
         super.layout(r);
     }
 
