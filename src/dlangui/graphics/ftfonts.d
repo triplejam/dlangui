@@ -180,10 +180,17 @@ class FreeTypeFontFile {
         debug(FontResources) Log.d("Font file opened successfully");
         _slot = _face.glyph;
         _faceName = familyName(_face);
-        error = FT_Set_Pixel_Sizes(
-                _face,    /* handle to face object */
-                0,        /* pixel_width           */
-                size );  /* pixel_height          */
+        error = FT_Set_Char_Size(
+          _face,    /* handle to face object           */
+          0,       /* char_width in 1/64th of points  */
+          size * 64,   /* char_height in 1/64th of points */
+          POINTS_PER_INCH,     /* horizontal device resolution    */
+          POINTS_PER_INCH); 
+        //error = FT_Set_Pixel_Sizes(
+        //        _face,    /* handle to face object */
+         //       0,        /* pixel_width           */
+        //        size );  /* pixel_height          */
+        
         if (error) {
             clear();
             return false;
