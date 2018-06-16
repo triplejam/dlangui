@@ -1445,6 +1445,17 @@ class SDLPlatform : Platform {
                             w.processMouseEvent(MouseAction.Wheel, 0, 0, event.wheel.x, event.wheel.y);
                         }
                         break;
+                    case SDL_DROPFILE:
+                        // workaround to open files on OSX
+                        char * file = event.drop.file;
+                        if (!file)
+                            lastDroppedFile = "";
+                        else {
+                            string s = fromStringz(file).dup;
+                            SDL_free(file);
+                            lastDroppedFile = s;
+                        }
+                        break;
                     default:
                         // not supported event
                         if (event.type == USER_EVENT_ID) {

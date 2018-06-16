@@ -2002,6 +2002,19 @@ class Platform {
         return _defaultWindowIcon;
     }
 
+    /// A simple workaround to open files on OSX.
+    protected string _lastDroppedFile = "";
+
+    /// get last dropped file
+    @property string lastDroppedFile() {
+        return _lastDroppedFile;
+    }
+
+    /// set last dropped file
+    @property void lastDroppedFile(string filename) {
+        _lastDroppedFile = filename;
+    }
+
     private IconProviderBase _iconProvider;
     @property IconProviderBase iconProvider() {
         if (_iconProvider is null) {
