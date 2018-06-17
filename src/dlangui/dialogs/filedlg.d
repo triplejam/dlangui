@@ -110,6 +110,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
     protected int _filterIndex;
     protected string _path;
     protected string _filename;
+    protected string _defaultExt = ""; // default extension added in save mode if not specified, needed to confirm override work correct
     protected DirEntry[] _entries;
     protected bool _isRoot;
 
@@ -171,9 +172,22 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         _path = s;
     }
 
+    protected string addDefaultExtIfNeeded(string file) {
+        if (_isOpenDialog)
+            return file;
+
+        if (_defaultExt.length == 0)
+            return file;
+
+        if (!extension(file)) {
+            return setExtension(file, _defaultExt);
+        }
+        return file;
+    }
+
     /// the name of the file or directory that is currently selected
     @property string filename() {
-        return _filename;
+        return addDefaultExtIfNeeded(_filename);
     }
 
     @property void filename(string s) {
@@ -190,6 +204,16 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             ++i;
         }
         return res;
+    }
+
+    /// Returns default extension added to files to save
+    @property string defaultExt() {
+        return _defaultExt;
+    }
+
+    /// Sets default extension added to files to save e.g. ".txt"
+    @property void defaultExt(string newDefaultExt) {
+        _defaultExt = newDefaultExt;
     }
 
     @property bool showHiddenFiles() {
@@ -581,9 +605,18 @@ class FileDialog : Dialog, CustomGridCellAdapter {
             openDirectory(e.name, _path);
         } else if (e.isFile) {
             string fname = e.name;
-            if ((_flags & FileDialogFlag.ConfirmOverwrite) && exists(fname) && isFile(fname)) {
-                showConfirmOverwriteQuestion(fname);
-                return;
+            if (_flags & FileDialogFlag.ConfirmOverwrite) {
+                if (!extension(fname)) 
+                    fname = addDefaultExtIfNeeded(fname);
+                
+                if (exists(fname) && isFile(fname)) {
+                    showConfirmOverwriteQuestion(fname);
+                }
+                else {
+                    Action result = _action;
+                    result.stringParam = fname;
+                    close(result);
+                }
             }
             else {
                 Action result = _action;
@@ -655,8 +688,8 @@ class FileDialog : Dialog, CustomGridCellAdapter {
                 }
                 else if (action.id == StandardAction.Save && !(_flags & FileDialogFlag.FileMustExist)) {
                     // save dialog
-                    if ((_flags & FileDialogFlag.ConfirmOverwrite) && exists(_filename) && isFile(_filename)) {
-                        showConfirmOverwriteQuestion(_filename);
+                    if ((_flags & FileDialogFlag.ConfirmOverwrite) && exists(filename) && isFile(filename)) {
+                        showConfirmOverwriteQuestion(filename);
                         return true;
                     }
                     else {
