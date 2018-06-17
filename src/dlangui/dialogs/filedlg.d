@@ -630,6 +630,8 @@ class FileDialog : Dialog, CustomGridCellAdapter {
     protected void onItemSelected(int index) {
         DirEntry e = _entries[index];
         string fname = e.name;
+        if (e.isDir && !(_flags & FileDialogFlag.SelectDirectory))
+            return;
         _edFilename.text = toUTF32(baseName(fname));
         _filename = fname;
     }
