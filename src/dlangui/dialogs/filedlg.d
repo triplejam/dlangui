@@ -827,7 +827,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         _fileList.multiSelect = _allowMultipleFiles;
         _fileList.cellPopupMenu = &getCellPopupMenu;
         _fileList.menuItemAction = &handleAction;
-        _fileList.minVisibleRows = 10;
+        _fileList.minVisibleRows = 20;
         _fileList.minVisibleCols = 4;
         _fileList.headerCellClicked = &onHeaderCellClicked;
 
