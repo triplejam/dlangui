@@ -129,6 +129,12 @@ interface OnWindowActivityHandler {
     bool onWindowActivityChange(Window window, bool isWindowActive);
 }
 
+/// File dropped
+interface OnFilesDroppedHandler {
+    void onFilesDropped(string[] files, Window targetWindow);
+}
+
+
 /// protected event list
 /// references to posted messages can be stored here at least to keep live reference and avoid GC
 /// as well, on some platforms it's easy to send id to message queue, but not pointer
@@ -2001,6 +2007,9 @@ class Platform {
     @property string defaultWindowIcon() {
         return _defaultWindowIcon;
     }
+
+    /// signal after files dropped (sometimes files drop is not maked by a window like SDL on OSX when open file in launcher)
+    Signal!OnFilesDroppedHandler onFilesDropped;
 
     private IconProviderBase _iconProvider;
     @property IconProviderBase iconProvider() {

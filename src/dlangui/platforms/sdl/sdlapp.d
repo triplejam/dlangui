@@ -1445,6 +1445,21 @@ class SDLPlatform : Platform {
                             w.processMouseEvent(MouseAction.Wheel, 0, 0, event.wheel.x, event.wheel.y);
                         }
                         break;
+                    case SDL_DROPFILE:
+                        char * file = event.drop.file;
+                        if (file) {
+                            string s = fromStringz(file).dup;
+                            SDL_free(file);
+                            if (onFilesDropped.assigned) {
+                                SDLWindow targetWindow = getWindow(event.drop.windowID); // this need SDL 2.0.5!
+                                if ((!targetWindow) || (!targetWindow.hasModalWindowsAbove())) {
+                                    onFilesDropped([s], targetWindow);
+                                    if (targetWindow)
+                                        targetWindow.handleDroppedFiles([s]);
+                                }
+                            }
+                        }
+                        break;
                     default:
                         // not supported event
                         if (event.type == USER_EVENT_ID) {

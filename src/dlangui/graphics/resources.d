@@ -135,15 +135,27 @@ struct EmbeddedResourceList {
     /// find by exact file name
     EmbeddedResource * find(string name) {
         // search backwards to allow overriding standard resources (which are added first)
-        if (SCREEN_DPI > 110 && (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg"))) {
-            // HIGH DPI resources are in /hdpi/ directory and started with hdpi_ prefix
-            string prefixedName = "hdpi_" ~ name;
-            for (int i = cast(int)list.length - 1; i >= 0; i--)
-                if (prefixedName.equal(list[i].name)) {
-                    Log.d("found hdpi resource ", prefixedName);
-                    return &list[i];
-                }
+        if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+            if (SCREEN_DPI >= 160) {
+                // EXTRA HIGH DPI resources are in /xhdpi/ directory and started with xhdpi_ prefix (200% images)
+                string prefixedName = "xhdpi_" ~ name;
+                for (int i = cast(int)list.length - 1; i >= 0; i--)
+                    if (prefixedName.equal(list[i].name)) {
+                        Log.d("found xhdpi resource ", prefixedName);
+                        return &list[i];
+                    }
+            }
+            if (SCREEN_DPI >= 110) {
+                // HIGH DPI resources are in /hdpi/ directory and started with hdpi_ prefix (150% images)
+                string prefixedName = "hdpi_" ~ name;
+                for (int i = cast(int)list.length - 1; i >= 0; i--)
+                    if (prefixedName.equal(list[i].name)) {
+                        Log.d("found hdpi resource ", prefixedName);
+                        return &list[i];
+                    }
+            }
         }
+        // 100% images and other files
         for (int i = cast(int)list.length - 1; i >= 0; i--)
             if (name.equal(list[i].name))
                 return &list[i];

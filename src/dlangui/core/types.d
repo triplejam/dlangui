@@ -341,8 +341,13 @@ private __gshared int PRIVATE_SCREEN_DPI_OVERRIDE = 0;
     return PRIVATE_SCREEN_DPI;
 }
 
-/// one point is 1/72 of inch
-enum POINTS_PER_INCH = 72;
+/// one point is 1/72 of inch on unix and 1/96 on windows
+version(Windows) {
+    enum POINTS_PER_INCH = 96;
+}
+else {
+    enum POINTS_PER_INCH = 72;
+}
 
 /// convert length in points (1/72in units) to pixels according to SCREEN_DPI
 int pointsToPixels(int pt) {
