@@ -563,6 +563,7 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         }
         res.ownAdapter = adapter;
         res.layoutHeight(FILL_PARENT);
+        res.layoutWidth(WRAP_CONTENT);
         res.itemClick = delegate(Widget source, int itemIndex) {
             openDirectory(_roots[itemIndex].path, null);
             res.selectItem(-1);
