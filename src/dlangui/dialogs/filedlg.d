@@ -933,6 +933,7 @@ class FilePathPanelItem : HorizontalLayout {
     this(string path) {
         super(null);
         styleId = STYLE_LIST_ITEM;
+        alignment = Align.Left | Align.VCenter;
         _path = path;
         string fname = isRoot(path) ? path : baseName(path);
         _text = new TextWidget(null, toUTF32(fname));
