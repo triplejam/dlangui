@@ -1446,14 +1446,18 @@ class SDLPlatform : Platform {
                         }
                         break;
                     case SDL_DROPFILE:
-                        // workaround to open files on OSX
                         char * file = event.drop.file;
-                        if (!file)
-                            lastDroppedFile = "";
-                        else {
+                        if (file) {
                             string s = fromStringz(file).dup;
                             SDL_free(file);
-                            lastDroppedFile = s;
+                            if (onFilesDropped.assigned) {
+                                SDLWindow targetWindow = getWindow(event.drop.windowID); // this need SDL 2.0.5!
+                                if ((!targetWindow) || (!targetWindow.hasModalWindowsAbove())) {
+                                    onFilesDropped([s], targetWindow);
+                                    if (targetWindow)
+                                        targetWindow.handleDroppedFiles([s]);
+                                }
+                            }
                         }
                         break;
                     default:
