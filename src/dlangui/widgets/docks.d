@@ -295,6 +295,7 @@ class DockHost : WidgetGroupDefaultDrawing {
             Widget item = _children.get(i);
             // TODO: fix
             if (item.visibility != Visibility.Gone) {
+                item.measureMinSize();
                 item.measureSize(pwidth, pheight);
                 if (sz.x < item.measuredWidth)
                     sz.x = item.measuredWidth;
