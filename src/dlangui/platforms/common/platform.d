@@ -619,10 +619,14 @@ class Window : CustomEventTarget {
             _mainWidget.measureMinSize();
             _mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
-        foreach(p; _popups)
+        foreach(p; _popups) {
+            p.measureMinSize();
             p.measureSize(_currentContentWidth, _currentContentHeight);
-        if (_tooltip.popup)
+        }
+        if (_tooltip.popup) {
+            _tooltip.popup.measureMinSize();
             _tooltip.popup.measureSize(_currentContentWidth, _currentContentHeight);
+        }
     }
     void layout() {
         if (_hScrollBar)
