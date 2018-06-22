@@ -661,7 +661,12 @@ __gshared bool glNoContext;
 bool initGLSupport(bool legacy = false) {
     import dlangui.platforms.common.platform : setOpenglEnabled;
     if (_glSupport && _glSupport.valid)
+    {
+        _glSupport.reinitializeShaders();
+        import dlangui.graphics.gldrawbuf:accessGLImageCache;
+        accessGLImageCache();
         return true;
+    }
     version(Android) {
         Log.d("initGLSupport");
     } else {
@@ -758,6 +763,12 @@ final class GLSupport {
         if (!_legacyMode)
             _shadersAreInitialized = initShaders();
     }
+    
+    private void reinitializeShaders()
+    {
+        _solidFillProgram.compile();
+        _textureProgram.compile();
+    }
 
     ~this() {
         uninitShaders();
@@ -781,8 +792,8 @@ final class GLSupport {
             Log.v("Compiling texture program");
             _textureProgram = new TextureProgram();
             _textureProgram.compile();
-            if (!_textureProgram.check())
-                return false;
+            //if (!_textureProgram.check())
+            //   return false;
         }
         Log.d("Shaders compiled successfully");
         return true;

@@ -309,6 +309,14 @@ void onGlyphDestroyedCallback(uint pobject) {
 private __gshared GLImageCache glImageCache;
 private __gshared GLGlyphCache glGlyphCache;
 
+public void accessGLImageCache()
+{
+    foreach(curPage; glImageCache._pages)
+        curPage.updateTexture();
+    foreach(curPage; glGlyphCache._pages)
+        curPage.updateTexture();
+}
+
 void initGLCaches() {
     if (!glImageCache)
         glImageCache = new GLImageCache;
