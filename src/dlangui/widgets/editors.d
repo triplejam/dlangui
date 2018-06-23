@@ -2984,6 +2984,9 @@ class EditBox : EditWidgetBase {
             visibleLines = 1;
         _vscrollbar.setRange(0, cast(int)_span.length);
         _vscrollbar.pageSize = visibleLines;
+
+        if (cast(int)_span.length <= visibleLines)
+            _firstVisibleLine = 0;
         _vscrollbar.position = _firstVisibleLine;
     }
 
