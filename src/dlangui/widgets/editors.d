@@ -2804,7 +2804,7 @@ class EditBox : EditWidgetBase {
         this(null);
     }
     /// create with ID parameter
-    this(string ID, dstring initialContent = null, ScrollBarMode hscrollbarMode = ScrollBarMode.Visible, ScrollBarMode vscrollbarMode = ScrollBarMode.Visible) {
+    this(string ID, dstring initialContent = null, ScrollBarMode hscrollbarMode = ScrollBarMode.Auto, ScrollBarMode vscrollbarMode = ScrollBarMode.Auto) {
         super(ID, hscrollbarMode, vscrollbarMode);
         _content = new EditableContent(true); // multiline
         _content.contentChanged = this;
