@@ -170,9 +170,9 @@ protected:
     /// widget state (set of flags from State enum)
     uint _state;
 
-    /// width measured by measure()
+    /// width measured by measureSize()
     int _measuredWidth;
-    /// height measured by measure()
+    /// height measured by measureSize()
     int _measuredHeight;
     /// width measured by measureMinSize()
     int _measuredMinWidth;
