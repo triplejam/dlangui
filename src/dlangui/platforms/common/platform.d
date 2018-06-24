@@ -487,6 +487,7 @@ class Window : CustomEventTarget {
     void adjustWindowOrContentSize(int minContentWidth, int minContentHeight) {
         _minContentWidth = minContentWidth;
         _minContentHeight = minContentHeight;
+        Log.d("Min content w: ", _minContentWidth, " h: ", _minContentHeight);
         if (_windowOrContentResizeMode == WindowOrContentResizeMode.resizeWindow || flags & WindowFlag.ExpandSize)
             resizeWindow(Point(max(_windowRect.right, minContentWidth), max(_windowRect.bottom, minContentHeight)));
         updateWindowOrContentSize();
@@ -531,6 +532,7 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
+                    _hScrollBar.measureMinSize();
                     _hScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
                     if (windowRect().bottom < _minContentHeight)
                         _hScrollBar.setRange(0, _minContentWidth + _hScrollBar.measuredHeight);
@@ -571,6 +573,7 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
+                    _vScrollBar.measureMinSize();
                     _vScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
                     if (_hScrollBar)
                         _vScrollBar.setRange(0, _minContentHeight+_hScrollBar.measuredHeight);
@@ -609,14 +612,26 @@ class Window : CustomEventTarget {
             _tooltip.popup.requestLayout();
     }
     void measure() {
-        if (_hScrollBar)
+        if (_hScrollBar) {
+            _hScrollBar.measureMinSize();
             _hScrollBar.measureSize(_dx, _dy);
+        }
 
-        if (_vScrollBar)
+        if (_vScrollBar) {
+            _vScrollBar.measureMinSize();
             _vScrollBar.measureSize(_dx, _dy);
+        }
 
         if (_mainWidget !is null) {
-            _mainWidget.measureMinSize();
+            _mainWidget.measureMinSize(); // after measure min size only width is ok, but height can be not real (like multiline text with fill parent width)
+            // some times min window size changes after for example add a lot of widgets, or some widget grow, so we need check minimal size first, and update window scrolls:
+            _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
+            if (_minContentWidth != _mainWidget.measuredWidth || _minContentHeight != _mainWidget.measuredHeight) {
+                _minContentWidth = _mainWidget.measuredWidth;
+                _minContentHeight = _mainWidget.measuredHeight;
+                updateWindowOrContentSize();
+            }
+            // real widget measure:
             _mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
         foreach(p; _popups) {

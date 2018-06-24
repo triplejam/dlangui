@@ -2850,6 +2850,7 @@ class EditBox : EditWidgetBase {
     override @property Widget fontSize(int size) {
         // Need to rewrap if fontSize changed
         _needRewrap = true;
+        requestMeasureMinContent();
         return super.fontSize(size);
     }
     
@@ -3398,35 +3399,29 @@ class EditBox : EditWidgetBase {
         return textSz;
     }
 
-    override void measureMinSize() {
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
+            return;
+
         FontRef font = font();
         _measuredTextToSetWidgetSizeWidths.length = _textToSetWidgetSize.length;
         int charsMeasured = font.measureText(_textToSetWidgetSize, _measuredTextToSetWidgetSizeWidths, MAX_WIDTH_UNSPECIFIED, tabSize);
         _measuredTextToSetWidgetSize.x = charsMeasured > 0 ? _measuredTextToSetWidgetSizeWidths[charsMeasured - 1]: 0;
         _measuredTextToSetWidgetSize.y = font.height;
-        
-        Point sz = _measuredTextToSetWidgetSize;
-        adjustMeasuredMinSize(sz.x, sz.y);
-    }
 
-    /// measure
-    override void measureSize(int parentWidth, int parentHeight) {
-        if (visibility == Visibility.Gone)
-            return;
+        _measuredMinContentWidth = _measuredTextToSetWidgetSize.x;
+        _measuredMinContentHeight = _measuredTextToSetWidgetSize.y;
 
-        updateFontProps();
-        updateMaxLineWidth();
         int findPanelHeight;
         if (_findPanel) {
-            _findPanel.measureSize(parentWidth, parentHeight);
+            _findPanel.measureMinSize();
+            _findPanel.measureSize(_findPanel.measuredMinWidth, measuredMinHeight);
             findPanelHeight = _findPanel.measuredHeight;
-            if (parentHeight != SIZE_UNSPECIFIED)
-                parentHeight -= findPanelHeight;
         }
 
-        super.measureSize(parentWidth, parentHeight);
+        _measuredMinContentHeight =+ findPanelHeight;
+        _needMeasureMinContent = false;
     }
-
 
     protected void highlightTextPattern(DrawBuf buf, int lineIndex, Rect lineRect, Rect visibleRect) {
         // TODO (_content -> _span) not working now:
@@ -3980,6 +3975,7 @@ class EditBox : EditWidgetBase {
         }
         if (!pos.empty)
             layout(pos);
+        requestMeasureMinContent();
         requestLayout();
         return res;
     }
@@ -3990,10 +3986,12 @@ class EditBox : EditWidgetBase {
             setFocus();
             if (hideOnly) {
                 _findPanel.visibility = Visibility.Gone;
+                requestMeasureMinContent();
             } else {
                 removeChild(_findPanel);
                 destroy(_findPanel);
                 _findPanel = null;
+                requestMeasureMinContent();
                 requestLayout();
             }
         }

@@ -481,19 +481,19 @@ class ResizerWidget : Widget {
     }
 
 
-    override void measureContentSize() {
-        if (!_needMeasureContent)
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
 
-        _measuredContentWidth = 7;
-        _measuredContentHeight = 7;
-        _needMeasureContent = false;
+        _measuredMinContentWidth = 7;
+        _measuredMinContentHeight = 7;
+        _needMeasureMinContent = false;
     }
 
     override void measureMinSize() {
         updateProps();
-        measureContentSize();
-        adjustMeasuredMinSize(_measuredContentWidth, _measuredContentHeight);
+        measureMinContentSize();
+        adjustMeasuredMinSize(_measuredMinContentWidth, _measuredMinContentHeight);
     }
     
     /**
@@ -502,8 +502,8 @@ class ResizerWidget : Widget {
     */
     override void measureSize(int parentWidth, int parentHeight) {
         updateProps();
-        measureContentSize();
-        adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
+        measureMinContentSize();
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredMinContentWidth, _measuredMinContentHeight);
     }
 
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).

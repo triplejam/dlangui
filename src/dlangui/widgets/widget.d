@@ -178,16 +178,16 @@ protected:
     int _measuredMinWidth;
     /// height measured by measureMinSize()
     int _measuredMinHeight;
-    /// content width
-    int _measuredContentWidth;
-    /// content height
-    int _measuredContentHeight;
+    /// measured min content width - width that must be visible in widget
+    int _measuredMinContentWidth;
+    /// measured min content height - height that must be visible in widget
+    int _measuredMinContentHeight;
     /// true to force layout
     bool _needLayout = true;
     /// true to force redraw
     bool _needDraw = true;
-    /// true to force measure content
-    bool _needMeasureContent = true;
+    /// true to force measure min content size
+    bool _needMeasureMinContent = true;
     /// parent widget
     Widget _parent;
     /// window (to be used for top level widgets only!)
@@ -291,8 +291,7 @@ public:
         if (_cachedStyle) {
             _cachedStyle = currentTheme.get(_styleId);
         }
-        requestMeasureContent();
-        requestLayout();
+        requestMeasureMinContent();
     }
 
     /// returns widget id, null if not set
@@ -609,7 +608,7 @@ public:
     /// returns true if redraw is required for widget and its children
     @property bool needDraw() { return _needDraw; }
     /// returns true if content measure is needed
-    @property bool needMeasureContent() { return _needMeasureContent; }
+    @property bool needMeasureMinContent() { return _needMeasureMinContent; }
     /// returns true is widget is being animated - need to call animate() and redraw
     @property bool animating() { return false; }
     /// animates window; interval is time left from previous draw, in hnsecs (1/10000000 of second)
@@ -619,9 +618,9 @@ public:
     @property measuredWidth() { return _measuredWidth; }
     /// returns measured height (calculated during measure() call)
     @property measuredHeight() { return _measuredHeight; }
-    /// returns measured min width (calculated during measureMinWidth() call)
+    /// returns measured min width (calculated during measureMinWidth() call) - WARNING - this may be a wrong value if widget height depends on width
     @property measuredMinWidth() { return _measuredMinWidth; }
-    /// returns measured min height (calculated during measureMinHeight() call)
+    /// returns measured min height (calculated during measureMinHeight() call) - WARNING - this may be a wrong value if widget height depends on width
     @property measuredMinHeight() { return _measuredMinHeight; }
     /// returns current width of widget in pixels
     @property int width() { return _pos.width; }
@@ -1404,9 +1403,10 @@ public:
         _needDraw = true;
     }
 
-    /// request measure content of widget
-    void requestMeasureContent() {
-        _needMeasureContent = true;
+    /// request measure min content size of widget
+    void requestMeasureMinContent() {
+        _needMeasureMinContent = true;
+        requestLayout();
     }
 
     /// helper function for implement measureSize() when widget's content dimensions are known, adds paddings, margins etc
@@ -1447,12 +1447,12 @@ public:
             dx = maxw;
         if (maxh != SIZE_UNSPECIFIED && dy > maxh)
             dy = maxh;
+            
         // apply FILL_PARENT
         if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && dx < parentWidth)
             dx = parentWidth;
         if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && dy < parentHeight)
             dy = parentHeight;
-        // apply max parent size constraint
         
         _measuredWidth = dx;
         _measuredHeight = dy;
@@ -1501,30 +1501,23 @@ public:
 
     */
     void measureSize(int parentWidth, int parentHeight) {
-        measureContentSize();
-        adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
+        measureMinContentSize();
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredMinContentWidth, _measuredMinContentHeight);
     }
 
     /**
         Measure minimum widget size
     */
     void measureMinSize() {
-        measureContentSize();
-        adjustMeasuredMinSize(_measuredContentWidth, _measuredContentHeight);
+        measureMinContentSize();
+        adjustMeasuredMinSize(_measuredMinContentWidth, _measuredMinContentHeight);
     }
 
-    void measureContentSize() {
-        _measuredContentWidth = 0;
-        _measuredContentHeight = 0;
-        _needMeasureContent = false;
-    }
-
-    bool contentSizeDependOnWidgetSize() {
-        return false;
-    }
-
-    bool widgetSizeDependOnContentSize() {
-        return true;
+    /// Minimal size of content that must be visible in widget
+    void measureMinContentSize() {
+        _measuredMinContentWidth = 0;
+        _measuredMinContentHeight = 0;
+        _needMeasureMinContent = false;
     }
 
     /// Returns true when change widget widths changes height

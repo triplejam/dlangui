@@ -70,19 +70,19 @@ class TextWidget : Widget {
         super(ID);
         styleId = STYLE_TEXT;
         _text.id = textResourceId;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
     this(string ID, dstring rawText) {
         super(ID);
         styleId = STYLE_TEXT;
         _text.value = rawText;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
     this(string ID, UIString uitext) {
         super(ID);
         styleId = STYLE_TEXT;
         _text = uitext;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
 
     /// max lines to show
@@ -90,7 +90,7 @@ class TextWidget : Widget {
     /// set max lines to show
     @property TextWidget maxLines(int n) {
         ownStyle.maxLines = n;
-        requestMeasureContent();
+        requestMeasureMinContent();
         return this;
     }
 
@@ -100,32 +100,28 @@ class TextWidget : Widget {
     /// set text to show
     override @property Widget text(dstring s) { 
         _text = s; 
-        requestMeasureContent();
+        requestMeasureMinContent();
         requestLayout();
         return this;
     }
     /// set text to show
     override @property Widget text(UIString s) { 
         _text = s;
-        requestMeasureContent();
+        requestMeasureMinContent();
         requestLayout();
         return this;
     }
     /// set text resource ID to show
     @property Widget textResource(string s) { 
         _text = s; 
-        requestMeasureContent();
+        requestMeasureMinContent();
         requestLayout();
         return this;
     }
 
-    override void requestMeasureContent() {
-        _needMeasureMinContentSize = true;
-        super.requestMeasureContent();
-    }
-
-    override bool contentSizeDependOnWidgetSize() {
-        return true;
+    override void requestMeasureMinContent() {
+        _needMeasureRealContent = true;
+        super.requestMeasureMinContent();
     }
 
     /// set to true if change widget width makes new widget heights
@@ -133,22 +129,22 @@ class TextWidget : Widget {
         return (maxLines != 1);
     }
 
-    private int _widthForContentSize = 0; 
+    private int _widthForRealContentSize = 0; 
     private int _widthForMinContentSize = 70;
-    private int _needMeasureMinContentSize = true;
-    private int _measuredMinContentWidth = 0;
-    private int _measuredMinContentHeight = 0;
+    private bool _needMeasureRealContent = true;
+    private int _measuredRealContentWidth = 0;
+    private int _measuredRealContentHeight = 0;
 
-    private @property int widthForContentSize() {
-        return _widthForContentSize;
+    private @property int widthForRealContentSize() {
+        return _widthForRealContentSize;
     }
 
     /// some controls like multiline text needs one dimension to calculate second (cotrols that )
-    private @property void widthForContentSize(int newWidth) {
-        if (_widthForContentSize != newWidth) {
-            _widthForContentSize = newWidth;
+    private @property void widthForRealContentSize(int newWidth) {
+        if (_widthForRealContentSize != newWidth) {
+            _widthForRealContentSize = newWidth;
             if (maxLines != 1) {
-                _needMeasureContent = true;
+                _needMeasureRealContent = true;
                 //requestLayout();
             }
         }
@@ -158,7 +154,8 @@ class TextWidget : Widget {
         if (_widthForMinContentSize != newWidth) {
             _widthForMinContentSize = newWidth;
             if (maxLines != 1) {
-                _needMeasureMinContentSize = true;
+                _needMeasureMinContent = true;
+                _needMeasureRealContent = true;
                 //requestLayout();
             }
         }
@@ -169,8 +166,8 @@ class TextWidget : Widget {
         adjustMeasuredMinSize(_measuredMinContentWidth, _measuredMinContentHeight);
     }
 
-    void measureMinContentSize() {
-        if (!_needMeasureMinContentSize)
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
 
         FontRef font = font();
@@ -195,12 +192,12 @@ class TextWidget : Widget {
         else
             _measuredMinContentHeight = 1; // this is width to height case so only width is important for height return 1 will be recalculated in next step (in layouts).
 
-        _needMeasureMinContentSize = false;
+        _needMeasureMinContent = false;
     }
 
             
-    override void measureContentSize() {
-        if (!_needMeasureContent)
+    void measureRealContentSize() {
+        if (!_needMeasureRealContent)
             return;
             
         FontRef font = font();
@@ -209,7 +206,7 @@ class TextWidget : Widget {
         if (maxLines == 1) 
             w = MAX_WIDTH_UNSPECIFIED;
         else 
-            w = _widthForContentSize;
+            w = _widthForRealContentSize;
 
         Point sz;
         
@@ -219,10 +216,10 @@ class TextWidget : Widget {
             sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
         }
 
-        _measuredContentWidth = sz.x;
-        _measuredContentHeight = sz.y;
+        _measuredRealContentWidth = sz.x;
+        _measuredRealContentHeight = sz.y;
 
-        _needMeasureContent = false;
+        _needMeasureRealContent = false;
     }
 
     override void measureSize(int parentWidth, int parentHeight) {
@@ -235,10 +232,10 @@ class TextWidget : Widget {
         pwidth -= m.left + m.right + p.left + p.right;
         pheight -= m.top + m.bottom + p.top + p.bottom;
         
-        widthForContentSize = pwidth;
+        widthForRealContentSize = pwidth;
         
-        measureContentSize();
-        adjustMeasuredSize(parentWidth, parentHeight, _measuredContentWidth, _measuredContentHeight);
+        measureRealContentSize();
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredRealContentWidth, _measuredRealContentHeight);
         ////Log.d("MText content size: ", measuredMinWidth, " ", measuredMinHeight);
     }
 
@@ -293,7 +290,7 @@ class SwitchButton : Widget {
         clickable = true;
         focusable = true;
         trackHover = true;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
     // called to process click and notify listeners
     override protected bool handleClick() {
@@ -301,20 +298,20 @@ class SwitchButton : Widget {
         return super.handleClick();
     }
 
-    override void measureContentSize() {
-        if (!_needMeasureContent)
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
 
         DrawableRef img = backgroundDrawable;
-        _measuredContentWidth = 0;
-        _measuredContentHeight = 0;
+        _measuredMinContentWidth = 0;
+        _measuredMinContentHeight = 0;
         
         if (!img.isNull) {
-            _measuredContentWidth = img.width;
-            _measuredContentHeight = img.height;
+            _measuredMinContentWidth = img.width;
+            _measuredMinContentHeight = img.height;
         }
 
-        _needMeasureContent = false;
+        _needMeasureMinContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -345,7 +342,7 @@ class ImageWidget : Widget {
     this(string ID = null, string drawableId = null) {
         super(ID);
         _drawableId = drawableId;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
 
     ~this() {
@@ -358,7 +355,7 @@ class ImageWidget : Widget {
     @property ImageWidget drawableId(string id) { 
         _drawableId = id;
         _drawable.clear();
-        requestMeasureContent();
+        requestMeasureMinContent();
         requestLayout();
         return this;
     }
@@ -382,7 +379,7 @@ class ImageWidget : Widget {
             return this;
         _drawableId = drawableId; 
         _drawable.clear();
-        requestMeasureContent();
+        requestMeasureMinContent();
         requestLayout();
         return this;
     }
@@ -398,20 +395,20 @@ class ImageWidget : Widget {
             _drawable.clear(); // remove cached drawable
     }
 
-    override void measureContentSize() {
-        if (!_needMeasureContent)
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
 
         DrawableRef img = drawable;
-        _measuredContentWidth = 0;
-        _measuredContentHeight = 0;
+        _measuredMinContentWidth = 0;
+        _measuredMinContentHeight = 0;
         
         if (!img.isNull) {
-            _measuredContentWidth = img.width;
-            _measuredContentHeight = img.height;
+            _measuredMinContentWidth = img.width;
+            _measuredMinContentHeight = img.height;
         }
 
-        _needMeasureContent = false;
+        _needMeasureMinContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -721,9 +718,9 @@ class RadioButton : ImageTextButton {
 class Button : Widget {
     protected UIString _text;
     override @property dstring text() const { return _text; }
-    override @property Widget text(dstring s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
-    override @property Widget text(UIString s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
-    @property Widget textResource(string s) { _text = s; requestMeasureContent(); requestLayout(); return this; }
+    override @property Widget text(dstring s) { _text = s; requestMeasureMinContent(); requestLayout(); return this; }
+    override @property Widget text(UIString s) { _text = s; requestMeasureMinContent(); requestLayout(); return this; }
+    @property Widget textResource(string s) { _text = s; requestMeasureMinContent(); requestLayout(); return this; }
     /// empty parameter list constructor - for usage by factory
     this() {
         super(null);
@@ -736,7 +733,7 @@ class Button : Widget {
         clickable = true;
         focusable = true;
         trackHover = true;
-        requestMeasureContent();
+        requestMeasureMinContent();
     }
 
     /// create with ID parameter
@@ -762,16 +759,16 @@ class Button : Widget {
         action = a;
     }
 
-    override void measureContentSize() {
-        if (!_needMeasureContent)
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
             
         FontRef font = font();
         Point sz = font.textSize(text);
 
-        _measuredContentWidth = sz.x;
-        _measuredContentHeight = sz.y;
-        _needMeasureContent = false;
+        _measuredMinContentWidth = sz.x;
+        _measuredMinContentHeight = sz.y;
+        _needMeasureMinContent = false;
     }
 
     override void onDraw(DrawBuf buf) {

@@ -169,27 +169,6 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         }
     }
 
-    protected bool _insideChangeScrollbarVisibility;
-    protected void checkIfNeededToChangeScrollbarVisibility() {
-        if (_insideChangeScrollbarVisibility)
-            return;
-        bool needHScroll = false;
-        bool needVScroll = false;
-        checkIfScrollbarsNeeded(needHScroll, needVScroll);
-        bool hscrollVisible = _hscrollbar && _hscrollbar.visibility == Visibility.Visible;
-        bool vscrollVisible = _vscrollbar && _vscrollbar.visibility == Visibility.Visible;
-        bool needChange = false;
-        if (_hscrollbar && hscrollVisible != needHScroll)
-            needChange = true;
-        if (_vscrollbar && vscrollVisible != needVScroll)
-            needChange = true;
-        if (needChange) {
-            _insideChangeScrollbarVisibility = true;
-            layout(_pos);
-            _insideChangeScrollbarVisibility = false;
-        }
-    }
-
     /// update scrollbar positions
     protected void updateScrollBars() {
         if (_hscrollbar) {
@@ -198,7 +177,6 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         if (_vscrollbar) {
             updateVScrollBar();
         }
-        //checkIfNeededToChangeScrollbarVisibility();
     }
 
     public @property ScrollBar hscrollbar() { return _hscrollbar; }
@@ -244,6 +222,7 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         _vscrollbar.setRange(0, _fullScrollableArea.height);
         _vscrollbar.pageSize(_visibleScrollableArea.height);
         _vscrollbar.position(_visibleScrollableArea.top - _fullScrollableArea.top);
+        // TODO: check if fullContentSize < visible area
     }
 
     protected void drawClient(DrawBuf buf) {
@@ -305,19 +284,12 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         return sz;
     }
 
-    private int _minWidthWithoutAdjust = 100;
-    private int _minHeightWithoutAdjust = 100;
-    
-    override void measureMinSize() {
-        adjustMeasuredMinSize(_minWidthWithoutAdjust, _minHeightWithoutAdjust);
-    }
-
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
-        if (visibility == Visibility.Gone) {
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
             return;
-        }
-        adjustMeasuredSize(parentWidth, parentHeight,_minWidthWithoutAdjust, _minHeightWithoutAdjust);
+        _measuredMinContentWidth = 100;
+        _measuredMinContentHeight = 100;
+        _needMeasureMinContent = false;
     }
 
     /// override to support modification of client rect after change, e.g. apply offset
@@ -412,12 +384,14 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         if (_hscrollbar && (_hscrollbarMode == ScrollBarMode.Visible || _hscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _hscrollbar.visibility;
             _hscrollbar.visibility = Visibility.Visible;
+            _hscrollbar.measureMinSize();
             _hscrollbar.measureSize(rc.width, rc.height);
             _hscrollbar.visibility = oldVisibility;
         }
         if (_vscrollbar && (_vscrollbarMode == ScrollBarMode.Visible || _vscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _vscrollbar.visibility;
             _vscrollbar.visibility = Visibility.Visible;
+            _hscrollbar.measureMinSize();
             _vscrollbar.measureSize(rc.width, rc.height);
             _vscrollbar.visibility = oldVisibility;
         }

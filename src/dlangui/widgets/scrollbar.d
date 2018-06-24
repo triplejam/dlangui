@@ -388,37 +388,48 @@ class ScrollBar : AbstractSlider, OnClickHandler {
         _pageDown.click = &onClick;
     }
 
-    override void measureSize(int parentWidth, int parentHeight) {
-        Point sz;
-        _btnBack.measureSize(parentWidth, parentHeight);
-        _btnForward.measureSize(parentWidth, parentHeight);
-        _indicator.measureSize(parentWidth, parentHeight);
-        _pageUp.measureSize(parentWidth, parentHeight);
-        _pageDown.measureSize(parentWidth, parentHeight);
-        _btnSize = _btnBack.measuredWidth;
-        _minIndicatorSize = _orientation == Orientation.Vertical ? _indicator.measuredHeight : _indicator.measuredWidth;
+    override void measureMinContentSize() {
+        if (!_needMeasureMinContent)
+            return;
+
+        _btnBack.measureMinSize();
+        _btnForward.measureMinSize();
+        _indicator.measureMinSize();
+        _pageUp.measureMinSize();
+        _pageDown.measureMinSize();
+        _btnSize = _btnBack.measuredMinWidth;
+        _minIndicatorSize = _orientation == Orientation.Vertical ? _indicator.measuredMinHeight : _indicator.measuredMinWidth;
         if (_btnSize < _minIndicatorSize)
             _btnSize = _minIndicatorSize;
-        if (_btnSize < _btnForward.measuredWidth)
-            _btnSize = _btnForward.measuredWidth;
-        if (_btnSize < _btnForward.measuredHeight)
-            _btnSize = _btnForward.measuredHeight;
-        if (_btnSize < _btnBack.measuredHeight)
-            _btnSize = _btnBack.measuredHeight;
+        if (_btnSize < _btnForward.measuredMinWidth)
+            _btnSize = _btnForward.measuredMinWidth;
+        if (_btnSize < _btnForward.measuredMinHeight)
+            _btnSize = _btnForward.measuredMinHeight;
+        if (_btnSize < _btnBack.measuredMinHeight)
+            _btnSize = _btnBack.measuredMinHeight;
         static if (BACKEND_GUI) {
             if (_btnSize < 16)
                 _btnSize = 16;
         }
         if (_orientation == Orientation.Vertical) {
             // vertical
-            sz.x = _btnSize;
-            sz.y = _btnSize * 5; // min height
+            _measuredMinContentWidth = _btnSize;
+            _measuredMinContentHeight = _btnSize * 5; // min height
         } else {
             // horizontal
-            sz.y = _btnSize;
-            sz.x = _btnSize * 5; // min height
+            _measuredMinContentHeight = _btnSize;
+            _measuredMinContentWidth = _btnSize * 5; // min height
         }
-        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
+    _needMeasureMinContent =false;
+    }
+    
+    override void measureSize(int parentWidth, int parentHeight) {
+        _btnBack.measureSize(parentWidth, parentHeight);
+        _btnForward.measureSize(parentWidth, parentHeight);
+        _indicator.measureSize(parentWidth, parentHeight);
+        _pageUp.measureSize(parentWidth, parentHeight);
+        _pageDown.measureSize(parentWidth, parentHeight);
+        adjustMeasuredSize(parentWidth, parentHeight, _measuredMinContentWidth, _measuredMinContentHeight);
     }
 
     override protected void onPositionChanged() {
