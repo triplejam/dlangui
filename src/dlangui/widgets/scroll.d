@@ -391,7 +391,7 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         if (_vscrollbar && (_vscrollbarMode == ScrollBarMode.Visible || _vscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _vscrollbar.visibility;
             _vscrollbar.visibility = Visibility.Visible;
-            _hscrollbar.measureMinSize();
+            _vscrollbar.measureMinSize();
             _vscrollbar.measureSize(rc.width, rc.height);
             _vscrollbar.visibility = oldVisibility;
         }
