@@ -1050,6 +1050,7 @@ class ListWidget : WidgetGroup, OnScrollHandler, OnAdapterChangeHandler {
         Visibility oldScrollbarVisibility = _scrollbar.visibility;
 
         _scrollbar.visibility = Visibility.Visible;
+        _scrollbar.measureMinSize();
         _scrollbar.measureSize(pwidth, pheight);
 
         _lastMeasureWidth = pwidth;
