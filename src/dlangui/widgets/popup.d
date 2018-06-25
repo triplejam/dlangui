@@ -24,6 +24,7 @@ import dlangui.widgets.widget;
 import dlangui.widgets.layouts;
 import dlangui.core.signals;
 import dlangui.platforms.common.platform;
+import dlangui.dialogs.dialog;
 
 /// popup alignment option flags
 enum PopupAlign : uint {
@@ -114,9 +115,14 @@ class PopupWidget : WidgetGroupDefaultDrawing {
                 pwidth -= m.left + m.right + p.left + p.right;
             if (parentHeight != SIZE_UNSPECIFIED)
                 pheight -= m.top + m.bottom + p.top + p.bottom;
-            
-            child(0).measureSize(pwidth, pheight);
-            adjustMeasuredSize(parentWidth, parentHeight, child(0).measuredWidth, child(0).measuredHeight);
+            if (cast(DialogFrame) child(0) !is null) {
+                child(0).measureSize(pwidth * 4 / 5, pheight * 4 / 5);
+                adjustMeasuredSize(pwidth * 4 / 5, pheight * 4 / 5, child(0).measuredWidth, child(0).measuredHeight);
+            }
+            else {
+                child(0).measureSize(pwidth, pheight);
+                adjustMeasuredSize(parentWidth, parentHeight, child(0).measuredWidth, child(0).measuredHeight);
+            }
         }
         else
             adjustMeasuredSize(parentWidth, parentHeight, 0, 0);

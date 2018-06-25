@@ -23,14 +23,18 @@ import dlangui.widgets.controls;
 
 /// window frame with caption widget
 class WindowFrame : VerticalLayout {
-
+    private VerticalLayout limitV;
+    private HorizontalLayout limitH;
     protected Widget _bodyWidget;
     @property Widget bodyWidget() { return _bodyWidget; }
     @property void bodyWidget(Widget widget) {
         _bodyLayout.replaceChild(widget, _bodyWidget);
         _bodyWidget = widget;
-        _bodyWidget.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
         _bodyWidget.parent = this;
+        limitH.layoutWidth = bodyWidget.layoutWidth;
+        limitH.layoutHeight = bodyWidget.layoutHeight;
+        limitV.layoutWidth = bodyWidget.layoutWidth;
+        limitV.layoutHeight = bodyWidget.layoutHeight;
         requestLayout();
     }
 
@@ -59,6 +63,8 @@ class WindowFrame : VerticalLayout {
 
         styleId = STYLE_DOCK_WINDOW;
 
+        limitH = new HorizontalLayout();
+        limitV = new VerticalLayout();
         _captionLayout = new HorizontalLayout("DOCK_WINDOW_CAPTION_PANEL");
         _captionLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
         _captionLayout.styleId = STYLE_DOCK_WINDOW_CAPTION;
@@ -82,11 +88,15 @@ class WindowFrame : VerticalLayout {
 
         _bodyWidget = createBodyWidget();
         _bodyLayout.addChild(_bodyWidget);
-        _bodyWidget.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
-        //_bodyWidget.styleId = STYLE_DOCK_WINDOW_BODY;
+        limitH.layoutWidth = bodyWidget.layoutWidth;
+        limitH.layoutHeight = bodyWidget.layoutHeight;
+        limitV.layoutWidth = bodyWidget.layoutWidth;
+        limitV.layoutHeight = bodyWidget.layoutHeight;
 
-        addChild(_captionLayout);
-        addChild(_bodyLayout);
+        limitV.addChild(_captionLayout);
+        limitV.addChild(_bodyLayout);
+        limitH.addChild(limitV);
+        addChild(limitH);
     }
 
     protected Widget createBodyWidget() {
