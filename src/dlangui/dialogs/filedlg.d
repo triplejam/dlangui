@@ -831,9 +831,14 @@ class FileDialog : Dialog, CustomGridCellAdapter {
         _fileList.minVisibleCols = 4;
         _fileList.headerCellClicked = &onHeaderCellClicked;
 
+        Widget buttonsPanel;
         _fileList.keyEvent = delegate(Widget source, KeyEvent event) {
             if (_shortcutHelper.onKeyEvent(event))
                 locateFileInList(_shortcutHelper.text);
+            if (event.keyCode == KeyCode.RETURN) {
+                buttonsPanel.setFocus();
+                return true;
+            }
             return false;
         };
 
@@ -844,9 +849,9 @@ class FileDialog : Dialog, CustomGridCellAdapter {
 
         addChild(content);
         if (_flags & FileDialogFlag.EnableCreateDirectory) {
-            addChild(createButtonsPanel([ACTION_CREATE_DIRECTORY, cast(immutable)_action, ACTION_CANCEL], 1, 1));
+            buttonsPanel = addChild(createButtonsPanel([ACTION_CREATE_DIRECTORY, cast(immutable)_action, ACTION_CANCEL], 1, 1));
         } else {
-            addChild(createButtonsPanel([cast(immutable)_action, ACTION_CANCEL], 0, 0));
+            buttonsPanel = addChild(createButtonsPanel([cast(immutable)_action, ACTION_CANCEL], 0, 0));
         }
 
         _fileList.customCellAdapter = this;
