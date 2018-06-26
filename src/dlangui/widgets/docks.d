@@ -335,6 +335,12 @@ class DockWindow : WindowFrame {
         _dockAlignment = DockAlignment.Right; // default alignment is right
     }
 
+    override @property void bodyWidget(Widget widget) {
+        widget.fillParent();
+        assert(widget.layoutWidth == FILL_PARENT && widget.layoutHeight == FILL_PARENT);
+        super.bodyWidget(widget);
+    }
+
     //protected Widget createBodyWidget() {
     //    return new Widget("DOCK_WINDOW_BODY");
     //}
