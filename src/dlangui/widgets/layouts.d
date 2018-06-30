@@ -32,39 +32,21 @@ import std.conv;
 struct LayoutItem {
     Widget _widget;
     Orientation _orientation;
-    int _measuredSize; // primary size for orientation
-    int _measuredMinSize;
-    int _secondarySize; // other measured size
-    int _secondaryMinSize;
-
-    int _measuredWidth; // primary size for orientation
+    int _measuredWidth; 
     int _measuredMinWidth;
-    int _measuredHeight; // other measured size
+    int _measuredHeight; 
     int _measuredMinHeight;
+    
     int _layoutWidth;
     int _layoutHeight;
 
-    int _layoutSize; //  layout size for primary dimension
     int _minSize; //  min size for primary dimension
     int _maxSize; //  max size for primary dimension
     int _weight; // weight
     bool _fillParent;
-    bool _isResizer;
-    bool _heightDependsOnWidths = false;
-    int  _resizerDelta;
-    @property bool canExtend() { return !_isResizer; }
-    @property int measuredSize() { return _measuredSize; }
-    @property int measuredMinSize() { return _measuredMinSize; }
-    @property int minSize() { return _measuredSize; }
-    @property int maxSize() { return _maxSize; }
-    @property int layoutSize() { return _layoutSize; }
     @property int layoutWidth() { return _layoutWidth; }
     @property int layoutHeight() { return _layoutHeight; }
-    @property int secondarySize() { return _secondarySize; }
-    @property int secondaryMinSize() { return _secondaryMinSize; }
-    @property bool fillParent() { return _fillParent; }
     @property int weight() { return _weight; }
-    @property bool heightDependsOnWidth() { return _widget.heightDependOnWidth; }
     @property ubyte alignment() {return _widget.alignment; }
     // just to help GC
     void clear() {
@@ -74,54 +56,17 @@ struct LayoutItem {
     void set(Widget widget, Orientation orientation) {
         _widget = widget;
         _orientation = orientation;
-        if (cast(ResizerWidget)widget) {
-            _isResizer = true;
-            _resizerDelta = (cast(ResizerWidget)widget).delta;
-        }
     }
 
     void measureWidth(int parentWidth) {
         _widget.measureWidth(parentWidth);
-        _weight = _widget.layoutWeight;
         _measuredWidth = _widget.measuredWidth;
-        if (_orientation == Orientation.Horizontal) {
-            _minSize = _widget.minWidth;
-            _maxSize = _widget.maxWidth;
-            _layoutSize = _widget.layoutWidth;
-        } else {
-            _minSize = _widget.minHeight;
-            _maxSize = _widget.maxHeight;
-            _layoutSize = _widget.layoutHeight;
-        }
-        _fillParent = _layoutSize == FILL_PARENT;
     }
 
     void measureHeight(int parentHeight) {
         _widget.measureHeight(parentHeight);
-        _weight = _widget.layoutWeight;
         _measuredHeight = _widget.measuredHeight;
         Log.d("_measuredHeight", _measuredHeight);
-    }
-
-    
-    /// set item and measure it
-    void measureSize(int parentWidth, int parentHeight) {
-        _widget.measureSize(parentWidth, parentHeight);
-        _weight = _widget.layoutWeight;
-        if (_orientation == Orientation.Horizontal) {
-            _secondarySize = _widget.measuredHeight;
-            _measuredSize = _widget.measuredWidth;
-            _minSize = _widget.minWidth;
-            _maxSize = _widget.maxWidth;
-            _layoutSize = _widget.layoutWidth;
-        } else {
-            _secondarySize = _widget.measuredWidth;
-            _measuredSize = _widget.measuredHeight;
-            _minSize = _widget.minHeight;
-            _maxSize = _widget.maxHeight;
-            _layoutSize = _widget.layoutHeight;
-        }
-        _fillParent = _layoutSize == FILL_PARENT;
     }
 
     void measureMinWidth() {
@@ -130,43 +75,12 @@ struct LayoutItem {
         _measuredMinWidth = _widget.measuredMinWidth;
         _layoutWidth = _widget.layoutWidth;
         _layoutHeight = _widget.layoutHeight;
-        
-        if (_orientation == Orientation.Horizontal) {
-            _minSize = _widget.minWidth;
-            _maxSize = _widget.maxWidth;
-            _layoutSize = _widget.layoutWidth;
-        } else {
-            _minSize = _widget.minHeight;
-            _maxSize = _widget.maxHeight;
-            _layoutSize = _widget.layoutHeight;
-        }
-        _fillParent = _layoutSize == FILL_PARENT;
     }
 
     void measureMinHeight(int width) {
         _widget.measureMinHeight(width);
-        _weight = _widget.layoutWeight;
         _measuredMinHeight = _widget.measuredMinHeight;
         Log.d("_measuredMinHeight", _measuredMinHeight);
-    }
-    
-    void measureMinSize() {
-        _widget.measureMinSize();
-        _weight = _widget.layoutWeight;
-        if (_orientation == Orientation.Horizontal) {
-            _secondaryMinSize = _widget.measuredMinHeight;
-            _measuredMinSize = _widget.measuredMinWidth;
-            _minSize = _widget.minWidth;
-            _maxSize = _widget.maxWidth;
-            _layoutSize = _widget.layoutWidth;
-        } else {
-            _secondaryMinSize = _widget.measuredMinWidth;
-            _measuredMinSize = _widget.measuredMinHeight;
-            _minSize = _widget.minHeight;
-            _maxSize = _widget.maxHeight;
-            _layoutSize = _widget.layoutHeight;
-        }
-        _fillParent = _layoutSize == FILL_PARENT;
     }
     
     void layout(ref Rect rc) {
@@ -179,22 +93,11 @@ class LayoutItems {
     Orientation _orientation;
     ubyte _alignment;
     LayoutItem[] _list;
-    LayoutItem*[] _heightDependOnWidthItemsList;
     int _count;
     int _totalSize;
-    int _totalSizeWithOutHeightDependOnWidths;
-    int _maxSecondarySize;
-    int _maxSecondaryMinSize;
-    Point _measureParentSize;
-    int itemsMinSizeSum;
     int itemsMinWidthSum;
     int itemsMinHeightSum;
     int layoutWeightSum;
-    bool _hasPercentSizeWidget = false;
-    size_t _percenSizeWidgetIndex;
-    bool _hasFillHeightChilds = false;
-    bool _hasFillWidthChilds = false;
-
     int _layoutWidth;
     int _layoutHeight;
 
@@ -203,10 +106,6 @@ class LayoutItems {
         _layoutWidth = layoutWidth;
         _layoutHeight = layoutHeight;
         _alignment = alignment;
-    }
-
-    bool heightDependOnWidth() {
-        return (_heightDependOnWidthItemsList.length > 0);
     }
 
     int measureMinWidth() {
@@ -220,13 +119,12 @@ class LayoutItems {
                 LayoutItem * item = &_list[i];
 
                 item.measureMinWidth();
-                if (item.fillParent) {
+                if (item.layoutWidth == FILL_PARENT) {
                     layoutWeightSum += item.weight;
                 }
 
                  _totalSize += item._measuredMinWidth;
                 //Log.d("item size ", item._measuredMinSize);
-
             }
         }
         else {
@@ -235,7 +133,7 @@ class LayoutItems {
                 LayoutItem * item = &_list[i];
 
                 item.measureMinWidth();
-                if (item.fillParent) {
+                if (item.layoutHeight == FILL_PARENT) {
                     layoutWeightSum += item.weight;
                 }
 
@@ -278,66 +176,12 @@ class LayoutItems {
         return _totalSize;
     }
 
-    
-    /// fill widget layout list with Visible or Invisible items, measure them
-    Point measureMinSize() {
-        layoutWeightSum = 0;
-        _heightDependOnWidthItemsList.length = 0;
-        
-        _totalSize = 0;
-        _totalSizeWithOutHeightDependOnWidths = 0;
-        _maxSecondaryMinSize = 0;
-        _hasPercentSizeWidget = false;
-        
-        // measure
-        for (int i = 0; i < _count; i++) {
-            LayoutItem * item = &_list[i];
-
-            item.measureMinSize();
-            if (item.fillParent) {
-                layoutWeightSum += item.weight;
-            }
-
-            if (item.heightDependsOnWidth) {
-                _heightDependOnWidthItemsList ~= item;
-            }
-            else if (!isPercentSize(item._layoutSize)) 
-                _totalSizeWithOutHeightDependOnWidths += item._measuredMinSize;
-
-            if (isPercentSize(item._layoutSize)) {
-                if (!_hasPercentSizeWidget) {
-                    _percenSizeWidgetIndex = i;
-                    _hasPercentSizeWidget = true;
-                }
-            }
-            else
-                _totalSize += item._measuredMinSize;
-                //Log.d("item size ", item._measuredMinSize);
-
-            if (_maxSecondaryMinSize < item._secondaryMinSize)
-                _maxSecondaryMinSize = item._secondaryMinSize;
-        }
-        
-        if (_hasPercentSizeWidget) {
-            // if there is no extra space this will be enought
-            LayoutItem * item = &_list[_percenSizeWidgetIndex];
-            if (_totalSize > 0)
-                item._measuredMinSize = to!int(_totalSize * ((1 / (1 - cast (double) (fromPercentSize(item._layoutSize, 100))/100)) - 1));
-            _totalSize += item._measuredMinSize;
-        }
-
-        itemsMinSizeSum = _totalSize;
-        return _orientation == Orientation.Horizontal ? Point(_totalSize, _maxSecondaryMinSize) : Point(_maxSecondaryMinSize, _totalSize);
-    }
-
     int measureWidth(int parentWidth) {
-        int extraSpace = 0;
-        int usedSpace = itemsMinWidthSum;
         _totalSize = 0;
 
         if (_orientation == Orientation.Horizontal) {
-            
-            extraSpace = parentWidth - usedSpace;
+            int extraSpace = 0;
+            extraSpace = parentWidth - itemsMinWidthSum;
             if (extraSpace < 1 || layoutWeightSum == 0) {
                 for (int i = 0; i < _count; i++) {
                     LayoutItem * item = &_list[i];
@@ -354,12 +198,10 @@ class LayoutItems {
                 for (int i = 0; i < _count; i++) {
                     LayoutItem * item = &_list[i];
 
-                    int sizeToMeasure = item._measuredMinWidth;
-                
                     if (item.layoutWidth == FILL_PARENT)
-                        item.measureWidth(sizeToMeasure + extraSpaceStep * item.weight);
+                        item.measureWidth(item._measuredMinWidth + extraSpaceStep * item.weight);
                     else
-                        item.measureWidth(sizeToMeasure);
+                        item.measureWidth(item._measuredMinWidth);
 
                     _totalSize += item._measuredWidth;
                 }
@@ -395,12 +237,10 @@ class LayoutItems {
             for (int i = 0; i < _count; i++) {
                 LayoutItem * item = &_list[i];
 
-                int sizeToMeasure = item._measuredMinHeight;
-                
                 if (item.layoutHeight == FILL_PARENT)
                     item.measureHeight(parentHeight);
                 else
-                    item.measureHeight(sizeToMeasure);
+                    item.measureHeight(item._measuredMinHeight);
 
                 if (_totalSize < item._measuredHeight)
                 _totalSize = item._measuredHeight;
@@ -425,133 +265,19 @@ class LayoutItems {
                 for (int i = 0; i < _count; i++) {
                     LayoutItem * item = &_list[i];
 
-                    int sizeToMeasure = item._measuredMinHeight;
-                
                     if (item.layoutHeight == FILL_PARENT)
-                        item.measureHeight(sizeToMeasure + extraSpaceStep * item.weight);
+                        item.measureHeight(item._measuredMinHeight + extraSpaceStep * item.weight);
                     else
-                        item.measureHeight(sizeToMeasure);
+                        item.measureHeight(item._measuredMinHeight);
 
                     _totalSize += item._measuredHeight;
                 }
             }
-            
 
         }
         Log.d("layouts height ", " ", _totalSize);
         return _totalSize;
 
-    }
-
-    
-    /// fill widget layout list with Visible or Invisible items, measure them
-    Point measureSize(int parentWidth, int parentHeight) {
-        _totalSize = 0;
-        _maxSecondarySize = 0;
-        _measureParentSize.x = parentWidth;
-        _measureParentSize.y = parentHeight;
-
-        int extraSpace = 0;
-        int usedSpace = itemsMinSizeSum;
-        // need to measure some widgets again (because they can change their size - they get real height here).
-        // heightDependOnWidth should return 1 height on min size calculate. 
-        if (_heightDependOnWidthItemsList.length > 0) {
-            usedSpace = _totalSizeWithOutHeightDependOnWidths;
-            
-            foreach (LayoutItem* item ; _heightDependOnWidthItemsList) {
-                if (isPercentSize(item._layoutSize))
-                    continue;
-                if (_orientation == Orientation.Horizontal)
-                    item.measureSize(item.measuredMinSize, parentHeight);
-                else {
-                    //item.measureSize(parentWidth, item.measuredMinSize); - zakomentowałe dzis
-                    item.measureSize(parentWidth, parentHeight - usedSpace);
-                    
-                    /*if (item.measuredMinSize > item.measuredSize) {
-                        extraSpaceOverflow += (item.measuredMinSize - item.measuredSize);
-                        //item._measuredMinSize = item.measuredSize;
-                        
-                        //Log.d("mms ", item.measuredMinSize, " ms ", item.measuredSize);
-                        //Log.d("extra space overflow", extraSpaceOverflow);
-                    }*/
-                }
-                
-                usedSpace += item._measuredSize;
-            }
-
-            if (_hasPercentSizeWidget) {
-                LayoutItem * item = &_list[_percenSizeWidgetIndex];
-                if (usedSpace > 0)
-                    item._measuredMinSize = to!int(usedSpace * ((1 / (1 - cast (double) (fromPercentSize(item._layoutSize, 100))/100)) - 1));
-                usedSpace += item._measuredMinSize;
-            }
-
-        }
-            
-        if (_orientation == Orientation.Horizontal) 
-            extraSpace = parentWidth - usedSpace;
-        else
-            extraSpace = parentHeight - usedSpace;
-
-        int extraSpaceForPercentSize = 0;
-        if (_hasPercentSizeWidget) {
-            LayoutItem * item = &_list[_percenSizeWidgetIndex];
-            extraSpaceForPercentSize = to!int(extraSpace * (cast (double) (fromPercentSize(item._layoutSize, 100))/100));
-            extraSpace -= extraSpaceForPercentSize;
-        }
-
-        if (extraSpace < 1 || layoutWeightSum == 0) {
-            for (int i = 0; i < _count; i++) {
-                LayoutItem * item = &_list[i];
-
-                if (_orientation == Orientation.Horizontal)
-                    item.measureSize(item.measuredMinSize, item.secondaryMinSize/*parentHeight*/);
-                else
-                    item.measureSize(parentWidth, item.measuredMinSize);
-                    
-                _totalSize += item._measuredSize;
-                    
-
-                if (_maxSecondarySize < item._secondarySize)
-                    _maxSecondarySize = item._secondarySize;
-            }
-        }
-        else {
-            int extraSpaceRemained = extraSpace;
-            int extraSpaceStep = extraSpace / layoutWeightSum;
-            
-            // maybe we need add step sum to not exceed extraSpace due to rounds
-            for (int i = 0; i < _count; i++) {
-                LayoutItem * item = &_list[i];
-
-                int sizeToMeasure = item.measuredMinSize;
-                if (item.heightDependsOnWidth)
-                    sizeToMeasure = item.measuredSize;
-                
-                if (_orientation == Orientation.Horizontal) {
-                    if (_hasPercentSizeWidget && i == _percenSizeWidgetIndex ) {
-                        item.measureSize(sizeToMeasure + extraSpaceForPercentSize, item.secondaryMinSize /*parentHeight*/);
-                    }
-                    else if (item.fillParent)
-                        item.measureSize(sizeToMeasure + extraSpaceStep * item.weight, item.secondaryMinSize /*parentHeight*/);
-                    else
-                        item.measureSize(sizeToMeasure, item.secondaryMinSize /*parentHeight*/);
-                }
-                else {
-                    if (_hasPercentSizeWidget && i == _percenSizeWidgetIndex )
-                        item.measureSize(parentWidth, sizeToMeasure + extraSpaceForPercentSize);
-                    else if (item.fillParent)
-                        item.measureSize(parentWidth, sizeToMeasure + extraSpaceStep * item.weight);
-                    else
-                        item.measureSize(parentWidth, sizeToMeasure);
-                }
-                _totalSize += item._measuredSize;
-
-                if (_maxSecondarySize < item._secondarySize)
-                    _maxSecondarySize = item._secondarySize;
-            }
-        }
-        return _orientation == Orientation.Horizontal ? Point(_totalSize, _maxSecondarySize) : Point(_maxSecondarySize, _totalSize);
     }
 
     /// fill widget layout list with Visible or Invisible items, measure them
@@ -571,15 +297,6 @@ class LayoutItems {
     }
 
     void layout(Rect rc) {
-        // measure again - available area could be changed
-        /*if (_measureParentSize.x != rc.width || _measureParentSize.y != rc.height) {
-            import core.runtime;
-            //Log.d(defaultTraceHandler);
-            Log.d("dodatkowe liczenie ***************************", rc.width, " " ,rc.height, "bylo ", _measureParentSize.x," " ,_measureParentSize.y);
-            measureSize(rc.width, rc.height);
-            
-        }*/
-        
         int mainSizeDelta = 0; // used in alignment
 
         // main size alignment
@@ -606,21 +323,13 @@ class LayoutItems {
         
         // final resize and layout of children
         int position = mainSizeDelta;
-        int deltaTotal = 0;
         for (int i = 0; i < _count; i++) {
             LayoutItem * item = &_list[i];
-            int layoutSize = item.layoutSize;
-            int weight = item.weight;
-            int size;
-            if (_orientation == Orientation.Vertical)
-                size = item._measuredHeight;
-            else
-                size = item._measuredWidth;
+           
             // apply size
             Rect childRect = rc;
             if (_orientation == Orientation.Vertical) {
                 // Vertical
-                // secondary size alignment
                 if (item._measuredWidth < rc.width){
                     if ((_alignment & Align.HCenter) == Align.HCenter) {
                         childRect.left += ((rc.width - item._measuredWidth) / 2);
@@ -631,9 +340,10 @@ class LayoutItems {
                 }
 
                 childRect.top += position;
-                childRect.bottom = childRect.top + size;
+                childRect.bottom = childRect.top + item._measuredHeight;
                 childRect.right = childRect.left + item._measuredWidth;
                 item.layout(childRect);
+                position += item._measuredHeight;
             } else {
                 // Horizontal
                 if (item._measuredHeight < rc.height){
@@ -645,12 +355,11 @@ class LayoutItems {
                     }
                 }
                 childRect.left += position;
-                childRect.right = childRect.left + size;
+                childRect.right = childRect.left + item._measuredWidth;
                 childRect.bottom = childRect.top + item._measuredHeight;
                 item.layout(childRect);
-                Log.d(" rect", childRect);
+                position += item._measuredWidth;
             }
-            position += size;
         }
     }
 
@@ -926,11 +635,6 @@ class LinearLayout : WidgetGroupDefaultDrawing {
 
     LayoutItems _layoutItems;
 
-    /// set to true if change widget width makes new widget heights
-    override bool heightDependOnWidth() {
-        return _layoutItems.heightDependOnWidth();
-    }
-
     override void measureMinWidth() {
         _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight, alignment);
         _layoutItems.setWidgets(_children);
@@ -946,7 +650,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
         pwidth -= m.left + m.right + p.left + p.right;
 
         int w = _layoutItems.measureWidth(pwidth);
-        adjustMeasuredWidth(parentWidth, w + m.left + m.right + p.left + p.right);
+        adjustMeasuredWidth(parentWidth, w + m.left + m.right + p.left + p.right); // adjustMeasuredWidth do not adds padings and margins
     }
 
     override void measureMinHeight(int width) {
@@ -966,42 +670,7 @@ class LinearLayout : WidgetGroupDefaultDrawing {
         pheight -= m.top + m.bottom + p.top + p.bottom;
 
         int h = _layoutItems.measureHeight(pheight);
-        adjustMeasuredHeight(parentHeight, h + m.top + m.bottom + p.top + p.bottom); // adjustMeasuredHeight nie dodaje padingów i marginesów
-    }
-    
-    
-    override void measureMinSize() {
-        // measure children
-        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight, alignment);
-        _layoutItems.setWidgets(_children);
-        Point sz = _layoutItems.measureMinSize();
-        //Log.d("Id ", id, " min size ", sz, "layouts items", _layoutItems._count);
-        
-        adjustMeasuredMinSize(sz.x, sz.y);
-    }
-
-    
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
-        /*if (parentWidth == _measuredMinWidth && parentHeight == _measuredMinHeight)
-        {
-            adjustMeasuredSize(parentWidth, parentHeight, _measuredMinWidth, _measuredMinHeight);
-            return;
-        }*/
-        
-        Rect m = margins;
-        Rect p = padding;
-        // calc size constraints for children
-        int pwidth = parentWidth;
-        int pheight = parentHeight;
-        pwidth -= m.left + m.right + p.left + p.right;
-        pheight -= m.top + m.bottom + p.top + p.bottom;
-        
-        // measure children
-        _layoutItems.setLayoutParams(orientation, layoutWidth, layoutHeight, alignment);
-        _layoutItems.setWidgets(_children);
-        Point sz = _layoutItems.measureSize(pwidth, pheight);
-        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredHeight(parentHeight, h + m.top + m.bottom + p.top + p.bottom); // adjustMeasuredHeight do not adds padings and margins
     }
 
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
