@@ -637,38 +637,115 @@ class TabControl : WidgetGroupDefaultDrawing {
         return true;
     }
 
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
-        //Log.d("tabControl.measure enter");
-        Rect m = margins;
-        Rect p = padding;
-        // calc size constraints for children
-        int pwidth = parentWidth;
-        int pheight = parentHeight;
-        if (parentWidth != SIZE_UNSPECIFIED)
-            pwidth -= m.left + m.right + p.left + p.right;
-        if (parentHeight != SIZE_UNSPECIFIED)
-            pheight -= m.top + m.bottom + p.top + p.bottom;
-        // measure children
-        Point sz;
+    override void measureMinWidth() {
+        int mw;
         if (_moreButton.visibility == Visibility.Visible) {
-            _moreButton.measureSize(pwidth, pheight);
-            sz.x = _moreButton.measuredWidth;
-            sz.y = _moreButton.measuredHeight;
+            _moreButton.measureMinWidth();
+            mw = _moreButton.measuredMinWidth;
         }
-        pwidth -= sz.x;
+        Visibility oldVisibility;
+
+        // Min width = the longest tab width
         for (int i = 1; i < _children.count; i++) {
             Widget tab = _children.get(i);
+            oldVisibility = tab.visibility;
             tab.visibility = Visibility.Visible;
-            tab.measureSize(pwidth, pheight);
-            if (sz.y < tab.measuredHeight)
-                sz.y = tab.measuredHeight;
-            if (sz.x + tab.measuredWidth > pwidth)
-                break;
-            sz.x += tab.measuredWidth - _buttonOverlap;
+            tab.measureMinWidth();
+            if (mw < tab.measuredMinWidth)
+                mw = tab.measuredMinWidth;
+                
+            tab.visibility = oldVisibility;
         }
-        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
-        //Log.d("tabControl.measure exit");
+
+        adjustMeasuredMinWidth(mw);
+    }
+
+    private Widget lastTab;
+    override void measureWidth(int parentWidth) {
+        lastTab = null;
+        Rect m = margins;
+        Rect p = padding;
+        int pwidth = parentWidth;
+        pwidth -= m.left + m.right + p.left + p.right;
+
+        int w;
+        if (_moreButton.visibility == Visibility.Visible) {
+            _moreButton.measureWidth(_moreButton.measuredMinWidth);
+            w = _moreButton.measuredWidth;
+        }
+
+        pwidth -= w;
+
+        for (int i = 1; i < _children.count; i++) {
+            Widget tab = _children.get(i);
+            if (tab.visibility != Visibility.Visible)
+                continue;
+            tab.measureWidth(pwidth);
+            if (w + tab.measuredWidth > pwidth)
+                break;
+            w += tab.measuredWidth - _buttonOverlap;
+            lastTab = tab;
+        }
+        adjustMeasuredWidth(parentWidth, w + m.left + m.right + p.left + p.right);
+    }
+
+    override void measureMinHeight(int width) {
+        Rect m = margins;
+        Rect p = padding;
+        int w = width;
+        w -= m.left + m.right + p.left + p.right;
+
+        int mh;
+        if (_moreButton.visibility == Visibility.Visible) {
+            _moreButton.measureMinHeight(w);
+
+            mh = _moreButton.measuredMinHeight;
+        }
+
+        w -= _moreButton.measuredWidth;
+        
+        Visibility oldVisibility;
+        for (int i = 1; i < _children.count; i++) {
+            Widget tab = _children.get(i);
+            oldVisibility = tab.visibility;
+            tab.visibility = Visibility.Visible;
+            tab.measureMinHeight(tab.measuredWidth);
+            if (mh < tab.measuredMinHeight)
+                mh = tab.measuredMinHeight;
+
+            tab.visibility = oldVisibility;
+        }
+        
+        adjustMeasuredMinHeight(mh);
+    }
+
+    override void measureHeight(int parentHeight) {
+        Rect m = margins;
+        Rect p = padding;
+        int pheight = parentHeight;
+        pheight -= m.top + m.bottom + p.top + p.bottom;
+
+        int h;
+
+        if (_moreButton.visibility == Visibility.Visible) {
+            _moreButton.measureHeight(pheight);
+            h = _moreButton.measuredHeight;
+        }
+
+        if (lastTab) {
+            for (int i = 1; i < _children.count; i++) {
+                Widget tab = _children.get(i);
+                //tab.visibility = Visibility.Visible;
+                if (tab.visibility != Visibility.Visible)
+                    continue;
+                tab.measureHeight(pheight);
+                if (h < tab.measuredHeight)
+                    h = tab.measuredHeight;
+                if (lastTab == tab)
+                    break;
+            }
+        }
+        adjustMeasuredHeight(parentHeight, h + m.top + m.bottom + p.top + p.bottom); // adjustMeasuredHeight do not adds padings and margins
     }
 
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
@@ -681,6 +758,7 @@ class TabControl : WidgetGroupDefaultDrawing {
         _pos = rc;
         applyMargins(rc);
         applyPadding(rc);
+
         // more button
         Rect moreRc = rc;
         if (_moreButton.visibility == Visibility.Visible) {
@@ -691,9 +769,9 @@ class TabControl : WidgetGroupDefaultDrawing {
         // tabs
         int maxw = rc.width;
         // measure and update visibility
-        TabItemWidget[] sorted = sortedItems();
+        ///TabItemWidget[] sorted = sortedItems();
         int w = 0;
-        for (int i = 0; i < sorted.length; i++) {
+        /*for (int i = 0; i < sorted.length; i++) {
             TabItemWidget widget = sorted[i];
             widget.visibility = Visibility.Visible;
             widget.measureSize(rc.width, rc.height);
@@ -702,7 +780,7 @@ class TabControl : WidgetGroupDefaultDrawing {
             } else {
                 widget.visibility = Visibility.Gone;
             }
-        }
+        }*/
         // layout visible items
         for (int i = 1; i < _children.count; i++) {
             TabItemWidget widget = cast(TabItemWidget)_children.get(i);
@@ -905,23 +983,6 @@ class TabHost : FrameLayout, TabHandler {
             _tabControl.selectTab(index, updateAccess);
         }
     }
-//    /// request relayout of widget and its children
-//    override void requestLayout() {
-//        Log.d("TabHost.requestLayout called");
-//        super.requestLayout();
-//        //_needLayout = true;
-//    }
-//    /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
-//    override void layout(Rect rc) {
-//        Log.d("TabHost.layout() called");
-//        super.layout(rc);
-//        Log.d("after layout(): needLayout = ", needLayout);
-//    }
-
-    override void measureSize(int parentWidth, int parentHeight) {
-        super.measureSize(parentWidth, parentHeight  - _tabControl.measuredHeight);
-    }
-
 }
 
 
