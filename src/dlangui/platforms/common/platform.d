@@ -532,8 +532,10 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
-                    _hScrollBar.measureMinSize();
-                    _hScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
+                    _hScrollBar.measureMinWidth();
+                    _hScrollBar.measureWidth(_windowRect.right);
+                    _hScrollBar.measureMinHeight(_hScrollBar.measuredWidth);
+                    _hScrollBar.measureHeight(_windowRect.bottom);
                     if (windowRect().bottom < _minContentHeight)
                         _hScrollBar.setRange(0, _minContentWidth + _hScrollBar.measuredHeight);
                     else
@@ -573,8 +575,10 @@ class Window : CustomEventTarget {
                             return true;
                         };
                     }
-                    _vScrollBar.measureMinSize();
-                    _vScrollBar.measureSize(_windowRect.right, _windowRect.bottom);
+                    _vScrollBar.measureMinWidth();
+                    _vScrollBar.measureWidth(_windowRect.right);
+                    _vScrollBar.measureMinHeight(_vScrollBar.measuredWidth);
+                    _vScrollBar.measureHeight(_windowRect.bottom);
                     if (_hScrollBar)
                         _vScrollBar.setRange(0, _minContentHeight+_hScrollBar.measuredHeight);
                     else
@@ -613,13 +617,19 @@ class Window : CustomEventTarget {
     }
     void measure() {
         if (_hScrollBar) {
-            _hScrollBar.measureMinSize();
-            _hScrollBar.measureSize(_dx, _dy);
+            _hScrollBar.measureMinWidth();
+            _hScrollBar.measureWidth(_dx);
+            _hScrollBar.measureMinHeight(_hScrollBar.measuredWidth);
+            _hScrollBar.measureHeight(_dy);
+            
         }
 
         if (_vScrollBar) {
-            _vScrollBar.measureMinSize();
-            _vScrollBar.measureSize(_dx, _dy);
+            _vScrollBar.measureMinWidth();
+            _vScrollBar.measureWidth(_dx);
+            _vScrollBar.measureMinHeight(_vScrollBar.measuredWidth);
+            _vScrollBar.measureHeight(_dy);
+            
         }
 
         if (_mainWidget !is null) {
