@@ -66,7 +66,6 @@ struct LayoutItem {
     void measureHeight(int parentHeight) {
         _widget.measureHeight(parentHeight);
         _measuredHeight = _widget.measuredHeight;
-        Log.d("_measuredHeight", _measuredHeight);
     }
 
     void measureMinWidth() {
@@ -80,7 +79,6 @@ struct LayoutItem {
     void measureMinHeight(int width) {
         _widget.measureMinHeight(width);
         _measuredMinHeight = _widget.measuredMinHeight;
-        Log.d("_measuredMinHeight", _measuredMinHeight);
     }
     
     void layout(ref Rect rc) {
@@ -144,7 +142,6 @@ class LayoutItems {
             
         }
         itemsMinWidthSum = _totalSize;
-        Log.d("layouts min width ", " ", _totalSize);
         return _totalSize;
     }
 
@@ -224,7 +221,6 @@ class LayoutItems {
             }
 
         }
-        Log.d("layouts width ", " ", _totalSize);
         return _totalSize;
 
     }
@@ -275,7 +271,6 @@ class LayoutItems {
             }
 
         }
-        Log.d("layouts height ", " ", _totalSize);
         return _totalSize;
 
     }
@@ -725,67 +720,75 @@ class FrameLayout : WidgetGroupDefaultDrawing {
         super(ID);
     }
 
-    override bool heightDependOnWidth() {
-        return (_heightDependOnWidthWidgets.length > 0);
-    }
-
-    private Widget[] _heightDependOnWidthWidgets;
-    
-    override void measureMinSize() {
-        // measure children
-        Point sz;
-        _heightDependOnWidthWidgets.length = 0;
+    override void measureMinWidth() {
+        int mw = 0;
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
             if (item.visibility != Visibility.Gone) {
-                if (item.heightDependOnWidth)
-                    _heightDependOnWidthWidgets ~= item;
-                item.measureMinSize();
-                if (sz.x < item.measuredMinWidth)
-                    sz.x = item.measuredMinWidth;
-                if (sz.y < item.measuredMinHeight)
-                    sz.y = item.measuredMinHeight;
+                item.measureMinWidth();
+                if (mw < item.measuredMinWidth)
+                    mw = item.measuredMinWidth;
             }
         }
-        adjustMeasuredMinSize(sz.x, sz.y);
+        adjustMeasuredMinWidth(mw);
     }
 
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
+    override void measureWidth(int parentWidth) {
         Rect m = margins;
         Rect p = padding;
-        // calc size constraints for children
         int pwidth = parentWidth;
-        int pheight = parentHeight;
         pwidth -= m.left + m.right + p.left + p.right;
-        pheight -= m.top + m.bottom + p.top + p.bottom;
+        int w = 0;
         
-        // measure children
-        Log.d("rodzic 0 ", _measuredMinWidth, " , ", _measuredMinHeight);
-        Log.d("rodzic 1 ", pwidth, " , ", pheight);
-        Point sz;
         for (int i = 0; i < _children.count; i++) {
             Widget item = _children.get(i);
             if (item.visibility != Visibility.Gone) {
-         //       if (item.heightDependOnWidth)
-           //         continue;
-                //item.measureSize(item.measuredMinWidth, item.measuredMinHeight);
-                item.measureSize(pwidth, pheight);
-                Log.d("Rozmiar itema ", item.measuredWidth, " , ", item.measuredHeight);
-                
-                if (sz.x < item.measuredWidth)
-                    sz.x = item.measuredWidth;
-                if (sz.y < item.measuredHeight)
-                    sz.y = item.measuredHeight;
+                item.measureWidth(pwidth);
+                if (w < item.measuredWidth)
+                    w = item.measuredWidth;
             }
         }
-        //foreach (item ; _heightDependOnWidthWidgets) {
-          //  item.measureSize();
-        //}
-        Log.d("rodzic 2 ", sz.x, " , ", sz.y);
-        adjustMeasuredSize(parentWidth, parentHeight, sz.x, sz.y);
+        adjustMeasuredWidth(parentWidth, w + m.left + m.right + p.left + p.right);
     }
-    
+
+
+    override void measureMinHeight(int width) {
+        Rect m = margins;
+        Rect p = padding;
+        int w = width;
+        w -= m.left + m.right + p.left + p.right;
+
+        int mh = 0;
+        for (int i = 0; i < _children.count; i++) {
+            Widget item = _children.get(i);
+            if (item.visibility != Visibility.Gone) {
+                item.measureMinHeight(w);
+                if (mh < item.measuredMinHeight)
+                    mh = item.measuredMinHeight;
+            }
+        }
+
+        adjustMeasuredMinHeight(mh);
+    }
+
+    override void measureHeight(int parentHeight) {
+        Rect m = margins;
+        Rect p = padding;
+        int pheight = parentHeight;
+        pheight -= m.top + m.bottom + p.top + p.bottom;
+
+        int h = 0;
+        for (int i = 0; i < _children.count; i++) {
+            Widget item = _children.get(i);
+            if (item.visibility != Visibility.Gone) {
+                item.measureHeight(pheight);
+                if (h < item.measuredHeight)
+                    h = item.measuredHeight;
+            }
+        }
+        adjustMeasuredHeight(parentHeight, h + m.top + m.bottom + p.top + p.bottom); // adjustMeasuredHeight do not adds padings and margins
+    }
+
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
         _needLayout = false;
