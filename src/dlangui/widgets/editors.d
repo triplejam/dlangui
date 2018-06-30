@@ -2662,23 +2662,31 @@ class EditLine : EditWidgetBase {
         return _measuredTextToSetWidgetSize;
     }
 
-    /// measure min size
-    override void measureMinSize() {
-        Point sz = measureTextToSetWidgetSize();
-        adjustMeasuredMinSize(sz.x, sz.y);
+    override void measureMinContentWidth() {
+        measureTextToSetWidgetSize();
+        _measuredMinContentWidth = _measuredTextToSetWidgetSize.x;
+    }
+
+    override void measureMinContentHeight(int width) {
+        _measuredMinContentHeight = _measuredTextToSetWidgetSize.y;
     }
     
-    /// measure size
-    override void measureSize(int parentWidth, int parentHeight) {
+   
+    /// measure width
+    override void measureWidth(int parentWidth) {
         if (visibility == Visibility.Gone)
             return;
 
+        adjustMeasuredWidth(parentWidth, _measuredMinWidth + _leftPaneWidth);
+    }
+
+    override void measureHeight(int parentHeight) {
         updateFontProps();
         ////wrapContent();
         measureVisibleText();
-        adjustMeasuredSize(parentWidth, parentHeight, _measuredTextToSetWidgetSize.x + _leftPaneWidth, _measuredTextToSetWidgetSize.y);
+        adjustMeasuredHeight(parentHeight, _measuredMinHeight);
     }
-
+    
     override bool handleAction(const Action a) {
         switch (a.id) with(EditorActions)
         {
@@ -3399,6 +3407,14 @@ class EditBox : EditWidgetBase {
         return textSz;
     }
 
+    override void measureMinContentWidth() {
+        measureMinContentSize();
+    }
+
+    override void measureMinContentHeight(int width) {
+        measureMinContentSize();
+    }
+
     override void measureMinContentSize() {
         if (!_needMeasureMinContent)
             return;
@@ -3414,8 +3430,10 @@ class EditBox : EditWidgetBase {
 
         int findPanelHeight;
         if (_findPanel) {
-            _findPanel.measureMinSize();
-            _findPanel.measureSize(_findPanel.measuredMinWidth, measuredMinHeight);
+            _findPanel.measureMinWidth();
+            _findPanel.measureWidth(_findPanel.measuredMinWidth);
+            _findPanel.measureMinHeight(_findPanel.measuredMinWidth);
+            _findPanel.measureHeight(_findPanel.measuredMinHeight);
             findPanelHeight = _findPanel.measuredHeight;
         }
 
