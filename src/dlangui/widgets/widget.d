@@ -1611,7 +1611,7 @@ public:
     }
 
 
-    void measureMinContentHeight() {
+    void measureMinContentHeight(int width) {
         _measuredMinContentHeight = 0;
     }
 
@@ -1630,7 +1630,7 @@ public:
     }
 
     void measureMinHeight(int width) {
-        measureMinContentHeight();
+        measureMinContentHeight(width);
         adjustMeasuredMinHeight(_measuredMinContentHeight);
     }
 

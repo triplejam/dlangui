@@ -119,124 +119,58 @@ class TextWidget : Widget {
         return this;
     }
 
-    override void requestMeasureMinContent() {
-        _needMeasureRealContent = true;
-        super.requestMeasureMinContent();
+    override void measureMinContentWidth() {
+        if (maxLines == 1)
+            measureMinContentSize();
+        else
+            _measuredMinContentWidth = _widthForMinContentSize;
     }
 
-    /// set to true if change widget width makes new widget heights
-    override bool heightDependOnWidth() {
-        return (maxLines != 1);
-    }
+    override void measureMinContentHeight(int width) {
+        if (maxLines == 1)
+            return;
 
-    private int _widthForRealContentSize = 0; 
+        if (!_needMeasureMinContent)
+            return;
+        Rect m = margins;
+        Rect p = padding;
+        int w = width;
+        w -= m.left + m.right + p.left + p.right;
+
+        Point sz;
+        sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
+        
+        _measuredMinContentHeight = sz.y;
+        _needMeasureMinContent = false;
+    }
+    
+
     private int _widthForMinContentSize = 70;
-    private bool _needMeasureRealContent = true;
-    private int _measuredRealContentWidth = 0;
-    private int _measuredRealContentHeight = 0;
-
-    private @property int widthForRealContentSize() {
-        return _widthForRealContentSize;
-    }
-
-    /// some controls like multiline text needs one dimension to calculate second (cotrols that )
-    private @property void widthForRealContentSize(int newWidth) {
-        if (_widthForRealContentSize != newWidth) {
-            _widthForRealContentSize = newWidth;
-            if (maxLines != 1) {
-                _needMeasureRealContent = true;
-                //requestLayout();
-            }
-        }
-    }
 
     @property void widthForMinContentSize(int newWidth) {
         if (_widthForMinContentSize != newWidth) {
             _widthForMinContentSize = newWidth;
             if (maxLines != 1) {
                 _needMeasureMinContent = true;
-                _needMeasureRealContent = true;
                 //requestLayout();
             }
         }
     }
     
-    override void measureMinSize() {
-        measureMinContentSize();
-        adjustMeasuredMinSize(_measuredMinContentWidth, _measuredMinContentHeight);
-    }
-
     override void measureMinContentSize() {
         if (!_needMeasureMinContent)
             return;
 
-        FontRef font = font();
-        
-        uint w;
-        if (maxLines == 1) 
-            w = MAX_WIDTH_UNSPECIFIED;
-        else 
-            w = _widthForMinContentSize;
-
         Point sz;
-        
         if (maxLines == 1) {
-            sz = font.textSize(text, w, 4, 0, textFlags);
-        } else {
-            sz = font.measureMultilineText(text, 2/*maxLines*/, w, 4, 0, textFlags);
-        }
+            FontRef font = font();
 
-        _measuredMinContentWidth = sz.x;
-        if (maxLines == 1)
+            sz = font.textSize(text, MAX_WIDTH_UNSPECIFIED, 4, 0, textFlags);
+            _measuredMinContentWidth = sz.x;
             _measuredMinContentHeight = sz.y;
-        else
-            _measuredMinContentHeight = 1; // this is width to height case so only width is important for height return 1 will be recalculated in next step (in layouts).
-
-        _needMeasureMinContent = false;
-    }
-
-            
-    void measureRealContentSize() {
-        if (!_needMeasureRealContent)
+            _needMeasureMinContent = false;
             return;
-            
-        FontRef font = font();
-        
-        uint w;
-        if (maxLines == 1) 
-            w = MAX_WIDTH_UNSPECIFIED;
-        else 
-            w = _widthForRealContentSize;
-
-        Point sz;
-        
-        if (maxLines == 1) {
-            sz = font.textSize(text, w, 4, 0, textFlags);
-        } else {
-            sz = font.measureMultilineText(text, maxLines, w, 4, 0, textFlags);
         }
-
-        _measuredRealContentWidth = sz.x;
-        _measuredRealContentHeight = sz.y;
-
-        _needMeasureRealContent = false;
-    }
-
-    override void measureSize(int parentWidth, int parentHeight) {
-        //Log.d("measure size ", _measuredContentWidth);
-        Rect m = margins;
-        Rect p = padding;
-        // calc size constraints for children
-        int pwidth = parentWidth;
-        int pheight = parentHeight;
-        pwidth -= m.left + m.right + p.left + p.right;
-        pheight -= m.top + m.bottom + p.top + p.bottom;
-        
-        widthForRealContentSize = pwidth;
-        
-        measureRealContentSize();
-        adjustMeasuredSize(parentWidth, parentHeight, _measuredRealContentWidth, _measuredRealContentHeight);
-        ////Log.d("MText content size: ", measuredMinWidth, " ", measuredMinHeight);
     }
 
     override void onDraw(DrawBuf buf) {
@@ -298,20 +232,22 @@ class SwitchButton : Widget {
         return super.handleClick();
     }
 
-    override void measureMinContentSize() {
-        if (!_needMeasureMinContent)
-            return;
-
+    override void measureMinContentWidth() {
         DrawableRef img = backgroundDrawable;
         _measuredMinContentWidth = 0;
-        _measuredMinContentHeight = 0;
-        
+
         if (!img.isNull) {
             _measuredMinContentWidth = img.width;
+        }
+    }
+
+    override void measureMinContentHeight(int width) {
+        DrawableRef img = backgroundDrawable;
+        _measuredMinContentHeight = 0;
+
+        if (!img.isNull) {
             _measuredMinContentHeight = img.height;
         }
-
-        _needMeasureMinContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -404,30 +340,13 @@ class ImageWidget : Widget {
         }
     }
 
-    override void measureMinContentHeight() {
+    override void measureMinContentHeight(int width) {
         DrawableRef img = drawable;
         _measuredMinContentHeight = 0;
 
         if (!img.isNull) {
             _measuredMinContentHeight = img.height;
         }
-    }
-
-        
-    override void measureMinContentSize() {
-        if (!_needMeasureMinContent)
-            return;
-
-        DrawableRef img = drawable;
-        _measuredMinContentWidth = 0;
-        _measuredMinContentHeight = 0;
-        
-        if (!img.isNull) {
-            _measuredMinContentWidth = img.width;
-            _measuredMinContentHeight = img.height;
-        }
-
-        _needMeasureMinContent = false;
     }
 
     override void onDraw(DrawBuf buf) {
@@ -788,14 +707,13 @@ class Button : Widget {
         _measuredMinContentWidth = sz.x;
         _measuredMinContentHeight = sz.y;
         _needMeasureMinContent = false;
-        Log.d("przycisk ", _measuredMinContentWidth, " t ", text);
     }
 
     override void measureMinContentWidth() {
         measureMinContentSize();
     }
 
-    override void measureMinContentHeight() {
+    override void measureMinContentHeight(int width) {
         measureMinContentSize();
     }
 
