@@ -284,12 +284,12 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         return sz;
     }
 
-    override void measureMinContentSize() {
-        if (!_needMeasureMinContent)
-            return;
+    override void measureMinContentWidth() {
         _measuredMinContentWidth = 100;
+    }
+
+    override void measureMinContentHeight(int width) {
         _measuredMinContentHeight = 100;
-        _needMeasureMinContent = false;
     }
 
     /// override to support modification of client rect after change, e.g. apply offset
@@ -384,15 +384,19 @@ class ScrollWidgetBase :  WidgetGroup, OnScrollHandler {
         if (_hscrollbar && (_hscrollbarMode == ScrollBarMode.Visible || _hscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _hscrollbar.visibility;
             _hscrollbar.visibility = Visibility.Visible;
-            _hscrollbar.measureMinSize();
-            _hscrollbar.measureSize(rc.width, rc.height);
+            _hscrollbar.measureMinWidth();
+            _hscrollbar.measureWidth(rc.width);
+            _hscrollbar.measureMinHeight(rc.width);
+            _hscrollbar.measureHeight(rc.height);
             _hscrollbar.visibility = oldVisibility;
         }
         if (_vscrollbar && (_vscrollbarMode == ScrollBarMode.Visible || _vscrollbarMode == ScrollBarMode.Auto)) {
             Visibility oldVisibility = _vscrollbar.visibility;
             _vscrollbar.visibility = Visibility.Visible;
-            _vscrollbar.measureMinSize();
-            _vscrollbar.measureSize(rc.width, rc.height);
+            _vscrollbar.measureMinWidth();
+            _vscrollbar.measureWidth(rc.width);
+            _vscrollbar.measureMinHeight(rc.width);
+            _vscrollbar.measureHeight(rc.height);
             _vscrollbar.visibility = oldVisibility;
         }
 
@@ -466,10 +470,10 @@ class ScrollWidget :  ScrollWidgetBase {
         // override it
         Point sz;
         if (_contentWidget) {
-            _contentWidget.measureMinSize();
-            _contentWidget.measureSize(_contentWidget.measuredMinWidth, _contentWidget.measuredMinHeight);
-            //sz.x = _contentWidget.measuredMinWidth;
-            //sz.y = _contentWidget.measuredMinHeight;
+            _contentWidget.measureMinWidth();
+            _contentWidget.measureWidth(_contentWidget.measuredMinWidth);
+            _contentWidget.measureMinHeight(_contentWidget.measuredMinWidth);
+            _contentWidget.measureHeight(_contentWidget.measuredMinHeight);
             sz.x = _contentWidget.measuredWidth;
             sz.y = _contentWidget.measuredHeight;
             
