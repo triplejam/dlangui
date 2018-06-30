@@ -356,10 +356,15 @@ class SDLWindow : Window {
             _mainWidget = new Widget();
         }
         if (_mainWidget) {
-            _mainWidget.measureMinSize();
+            /*_mainWidget.measureMinSize();
             Log.d("minimum window size", _mainWidget.measuredMinWidth, " ", _mainWidget.measuredMinHeight);
             _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
-            Log.d("window size ", _mainWidget.measuredWidth, " ", _mainWidget.measuredHeight);
+            Log.d("window size ", _mainWidget.measuredWidth, " ", _mainWidget.measuredHeight);*/
+            _mainWidget.measureMinWidth();
+            _mainWidget.measureWidth(_mainWidget.measuredMinWidth);
+            _mainWidget.measureMinHeight(_mainWidget.measuredMinWidth);
+            _mainWidget.measureHeight(_mainWidget.measuredMinHeight);
+            
             if (flags & WindowFlag.MeasureSize)
                 resizeWindow(Point(_mainWidget.measuredWidth, _mainWidget.measuredHeight));
             

@@ -1409,6 +1409,56 @@ public:
         requestLayout();
     }
 
+    /// helper function for implement measureWidth() when widget's content dimensions are known, etc
+    protected void adjustMeasuredWidth(int parentWidth, int mWidth) {
+        if (visibility == Visibility.Gone) {
+            _measuredWidth = 0;
+            return;
+        }
+        int dx = mWidth;
+
+        int lw = layoutWidth;
+        if (!(isPercentSize(lw) || isSpecialSize(lw)))
+            dx = lw.toPixels();
+        
+        // apply min/max width and height constraints
+        int minw = minWidth;
+        int maxw = maxWidth;
+        if (minw != SIZE_UNSPECIFIED && dx < minw)
+            dx = minw;
+        if (maxw != SIZE_UNSPECIFIED && dx > maxw)
+            dx = maxw;
+            
+        // apply FILL_PARENT
+        if (parentWidth != SIZE_UNSPECIFIED && layoutWidth == FILL_PARENT && dx < parentWidth)
+            dx = parentWidth;
+
+        _measuredWidth = dx;
+    }
+    
+
+    /// helper function for implement measureHeight() when widget's content dimensions are known, etc
+    protected void adjustMeasuredHeight(int parentHeight, int mHeight) {
+        if (visibility == Visibility.Gone) {
+            _measuredWidth = _measuredHeight = 0;
+            return;
+        }
+        int dy = mHeight;
+        // check for fixed size set in layoutWidth, layoutHeight
+        int lh = layoutHeight;
+        // constant value, and percent size support
+
+        if (!(isPercentSize(lh) || isSpecialSize(lh)))
+            dy = lh.toPixels();
+        
+        // apply FILL_PARENT
+        if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && dy < parentHeight)
+            dy = parentHeight;
+
+        _measuredHeight = dy;
+    }
+
+    
     /// helper function for implement measureSize() when widget's content dimensions are known, adds paddings, margins etc
     protected void adjustMeasuredSize(int parentWidth, int parentHeight, int mWidth, int mHeight) {
         if (visibility == Visibility.Gone) {
@@ -1453,10 +1503,71 @@ public:
             dx = parentWidth;
         if (parentHeight != SIZE_UNSPECIFIED && layoutHeight == FILL_PARENT && dy < parentHeight)
             dy = parentHeight;
-        
+
+        if (dy > parentHeight)
+            dy = parentHeight;
+            
         _measuredWidth = dx;
         _measuredHeight = dy;
     }
+
+    /// helper function for implement measureMinWidth() when widget's content dimensions are known
+    protected void adjustMeasuredMinWidth(int mWidth) {
+        // maybe not neccesary
+        if (visibility == Visibility.Gone) {
+            _measuredMinWidth = 0;
+            return;
+        }
+        Rect m = margins;
+        Rect p = padding;
+        // summarize margins, padding, and content size
+        int dx = m.left + m.right + p.left + p.right + mWidth;
+        // check for fixed size set in layoutWidth, layoutHeight
+        int lw = layoutWidth;
+        // constant value support
+        if (!(isPercentSize(lw) || isSpecialSize(lw)))
+            dx = lw.toPixels();
+        // apply min/max width and height constraints
+        int minw = minWidth;
+        int maxw = maxWidth;
+        if (minw != SIZE_UNSPECIFIED && dx < minw)
+            dx = minw;
+        if (maxw != SIZE_UNSPECIFIED && dx > maxw)
+            dx = maxw;
+        _measuredMinWidth = dx;
+    }
+
+    /// helper function for implement measureMinSize() when widget's content dimensions are known
+    protected void adjustMeasuredMinHeight(int mHeight) {
+        // maybe not neccesary
+        if (visibility == Visibility.Gone) {
+            _measuredMinWidth = _measuredMinHeight = 0;
+            return;
+        }
+        Rect m = margins;
+        Rect p = padding;
+        
+        // summarize margins, padding, and content size
+        int dy = m.top + m.bottom + p.top + p.bottom + mHeight;
+        
+        // check for fixed size set in layoutWidth, layoutHeight
+        int lh = layoutHeight;
+        
+        // constant value support
+        if (!(isPercentSize(lh) || isSpecialSize(lh)))
+            dy = lh.toPixels();
+            
+        // apply min/max width and height constraints
+        int minh = minHeight;
+        int maxh = maxHeight;
+        if (minh != SIZE_UNSPECIFIED && dy < minh)
+            dy = minh;
+        if (maxh != SIZE_UNSPECIFIED && dy > maxh)
+            dy = maxh;
+        _measuredMinHeight = dy;
+    }
+
+
 
     /// helper function for implement measureMinSize() when widget's content dimensions are known
     protected void adjustMeasuredMinSize(int mWidth, int mHeight) {
@@ -1495,7 +1606,38 @@ public:
         _measuredMinHeight = dy;
     }
 
+    void measureMinContentWidth() {
+        _measuredMinContentWidth = 0;
+    }
 
+
+    void measureMinContentHeight() {
+        _measuredMinContentHeight = 0;
+    }
+
+    /**
+        Measure widget minimum width. (Step 1 of five phase layout).
+
+    */
+    void measureMinWidth() {
+        measureMinContentWidth();
+        adjustMeasuredMinWidth(_measuredMinContentWidth);
+        
+    }
+
+    void measureWidth(int parentWidth) {
+        adjustMeasuredWidth(parentWidth, _measuredMinWidth);
+    }
+
+    void measureMinHeight(int width) {
+        measureMinContentHeight();
+        adjustMeasuredMinHeight(_measuredMinContentHeight);
+    }
+
+    void measureHeight(int parentHeight) {
+        adjustMeasuredHeight(parentHeight, _measuredMinHeight);
+    }
+    
     /**
         Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
 

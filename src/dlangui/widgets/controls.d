@@ -395,6 +395,25 @@ class ImageWidget : Widget {
             _drawable.clear(); // remove cached drawable
     }
 
+    override void measureMinContentWidth() {
+        DrawableRef img = drawable;
+        _measuredMinContentWidth = 0;
+
+        if (!img.isNull) {
+            _measuredMinContentWidth = img.width;
+        }
+    }
+
+    override void measureMinContentHeight() {
+        DrawableRef img = drawable;
+        _measuredMinContentHeight = 0;
+
+        if (!img.isNull) {
+            _measuredMinContentHeight = img.height;
+        }
+    }
+
+        
     override void measureMinContentSize() {
         if (!_needMeasureMinContent)
             return;
@@ -769,6 +788,15 @@ class Button : Widget {
         _measuredMinContentWidth = sz.x;
         _measuredMinContentHeight = sz.y;
         _needMeasureMinContent = false;
+        Log.d("przycisk ", _measuredMinContentWidth, " t ", text);
+    }
+
+    override void measureMinContentWidth() {
+        measureMinContentSize();
+    }
+
+    override void measureMinContentHeight() {
+        measureMinContentSize();
     }
 
     override void onDraw(DrawBuf buf) {

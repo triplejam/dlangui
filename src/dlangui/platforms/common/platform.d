@@ -623,16 +623,30 @@ class Window : CustomEventTarget {
         }
 
         if (_mainWidget !is null) {
-            _mainWidget.measureMinSize(); // after measure min size only width is ok, but height can be not real (like multiline text with fill parent width)
+            /*_mainWidget.measureMinSize(); // after measure min size only width is ok, but height can be not real (like multiline text with fill parent width)
             // some times min window size changes after for example add a lot of widgets, or some widget grow, so we need check minimal size first, and update window scrolls:
             _mainWidget.measureSize(_mainWidget.measuredMinWidth, _mainWidget.measuredMinHeight);
             if (_minContentWidth != _mainWidget.measuredWidth || _minContentHeight != _mainWidget.measuredHeight) {
                 _minContentWidth = _mainWidget.measuredWidth;
                 _minContentHeight = _mainWidget.measuredHeight;
                 updateWindowOrContentSize();
+            }*/
+            _mainWidget.measureMinWidth();
+            _mainWidget.measureWidth(_mainWidget.measuredMinWidth);
+            _mainWidget.measureMinHeight(_mainWidget.measuredMinWidth);
+            _mainWidget.measureHeight(_mainWidget.measuredMinHeight);
+            if (_minContentWidth != _mainWidget.measuredWidth || _minContentHeight != _mainWidget.measuredHeight) {
+                _minContentWidth = _mainWidget.measuredWidth;
+                _minContentHeight = _mainWidget.measuredHeight;
+                updateWindowOrContentSize();
             }
             // real widget measure:
-            _mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
+            _mainWidget.measureMinWidth();
+            _mainWidget.measureWidth(_currentContentWidth);
+            _mainWidget.measureMinHeight(_mainWidget.measuredMinWidth);
+            _mainWidget.measureHeight(_currentContentHeight);
+            
+            ///_mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
         foreach(p; _popups) {
             p.measureMinSize();
