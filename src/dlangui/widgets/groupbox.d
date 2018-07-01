@@ -139,21 +139,11 @@ class GroupBox : LinearLayout {
         return p;
     }
 
-    override protected void adjustMeasuredMinSize(int contentWidth, int contentHeight) {
-        _caption.measureMinSize();
-        calcFrame();
-        int topPadding = _topFrameLeft + _topFrameRight;
-        int bottomPadding = _frameLeft + _frameRight;
-        int extraTop = topPadding - bottomPadding;
-        int w = _caption.measuredMinWidth + extraTop;
-        if (contentWidth < w)
-            contentWidth = w;
-        super.adjustMeasuredMinSize(contentWidth, contentHeight);
-    }
-    
-    /// helper function for implement measureSize() when widget's content dimensions are known
-    override protected void adjustMeasuredSize(int parentWidth, int parentHeight, int contentWidth, int contentHeight) {
-        _caption.measureSize(parentWidth, parentHeight);
+    override protected void adjustMeasuredMinWidth(int contentWidth) {
+        _caption.measureMinWidth();
+        _caption.measureWidth(_caption.measuredMinWidth);
+        _caption.measureMinHeight(_caption.measuredWidth);
+        _caption.measureHeight(_caption.measuredMinHeight);
         calcFrame();
         int topPadding = _topFrameLeft + _topFrameRight;
         int bottomPadding = _frameLeft + _frameRight;
@@ -161,9 +151,24 @@ class GroupBox : LinearLayout {
         int w = _caption.measuredWidth + extraTop;
         if (contentWidth < w)
             contentWidth = w;
-        super.adjustMeasuredSize(parentWidth, parentHeight, contentWidth, contentHeight);
+        
+        super.adjustMeasuredMinWidth(contentWidth);
     }
 
+    override protected void adjustMeasuredWidth(int parentWidth, int contentWidth) {
+        int topPadding = _topFrameLeft + _topFrameRight;
+        int bottomPadding = _frameLeft + _frameRight;
+        int extraTop = topPadding - bottomPadding;
+        Rect m = margins;
+        Rect p = padding;
+        int w = _caption.measuredWidth + extraTop + m.top + m.bottom + p.top + p.bottom;
+        Log.d(_caption.text, " ", contentWidth);
+        if (contentWidth < w)
+            contentWidth = w;
+        Log.d(_caption.text, " ", contentWidth);
+        super.adjustMeasuredWidth(parentWidth, contentWidth);
+    }
+    
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
         super.layout(rc);
@@ -172,7 +177,6 @@ class GroupBox : LinearLayout {
         r.bottom = r.top + _topHeight;
         r.left += _topFrameLeft + margins.left;
         r.right -= _topFrameRight;
-        _caption.measureSize(r.width, r.height);
         if (r.width > _caption.measuredWidth)
             r.right = r.left + _caption.measuredWidth;
         _caption.layout(r);
