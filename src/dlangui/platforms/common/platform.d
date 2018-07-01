@@ -643,7 +643,7 @@ class Window : CustomEventTarget {
             }*/
             _mainWidget.measureMinWidth();
             _mainWidget.measureWidth(_mainWidget.measuredMinWidth);
-            _mainWidget.measureMinHeight(_mainWidget.measuredMinWidth);
+            _mainWidget.measureMinHeight(_mainWidget.measuredWidth);
             _mainWidget.measureHeight(_mainWidget.measuredMinHeight);
             if (_minContentWidth != _mainWidget.measuredWidth || _minContentHeight != _mainWidget.measuredHeight) {
                 _minContentWidth = _mainWidget.measuredWidth;
@@ -659,12 +659,16 @@ class Window : CustomEventTarget {
             ///_mainWidget.measureSize(_currentContentWidth, _currentContentHeight);
         }
         foreach(p; _popups) {
-            p.measureMinSize();
-            p.measureSize(_currentContentWidth, _currentContentHeight);
+            p.measureMinWidth();
+            p.measureWidth(_currentContentWidth);
+            p.measureMinHeight(p.measuredWidth);
+            p.measureHeight(_currentContentHeight);
         }
         if (_tooltip.popup) {
-            _tooltip.popup.measureMinSize();
-            _tooltip.popup.measureSize(_currentContentWidth, _currentContentHeight);
+            _tooltip.popup.measureMinWidth();
+            _tooltip.popup.measureWidth(_currentContentWidth);
+            _tooltip.popup.measureMinHeight(_tooltip.popup.measuredWidth);
+            _tooltip.popup.measureHeight(_currentContentHeight);
         }
     }
     void layout() {

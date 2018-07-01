@@ -90,43 +90,72 @@ class PopupWidget : WidgetGroupDefaultDrawing {
     /// set modality flag
     PopupWidget modal(bool modal) { _modal = modal; return this; }
 
-
-    override void measureMinSize() {
+    override void measureMinWidth() {
         if (childCount > 0) {
-            child(0).measureMinSize();
-            adjustMeasuredMinSize(child(0).measuredMinWidth, child(0).measuredMinHeight);
+            child(0).measureMinWidth();
+            adjustMeasuredMinWidth(child(0).measuredMinWidth);
         }
         else {
-            adjustMeasuredMinSize(0,0);
+            adjustMeasuredMinWidth(0);
         }
     }
-    
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
+
+    override void measureWidth(int parentWidth) {
+        if (childCount > 0) {
+            Rect m = margins;
+            Rect p = padding;
+            int pwidth = parentWidth;
+            pwidth -= m.left + m.right + p.left + p.right;
+            
+            if (cast(DialogFrame) child(0) !is null) {
+                child(0).measureWidth(pwidth * 4 / 5);
+                adjustMeasuredWidth(pwidth * 4 / 5, child(0).measuredWidth);
+            }
+            else {
+                child(0).measureWidth(pwidth);
+                adjustMeasuredWidth(parentWidth, child(0).measuredWidth);
+            }
+        }
+        else
+            adjustMeasuredWidth(parentWidth, 0);
+    }
+
+    override void measureMinHeight(int widgetWidth) {
         if (childCount > 0) {
 
             Rect m = margins;
             Rect p = padding;
+            int w = widgetWidth;
+            w -= m.left + m.right + p.left + p.right;
 
-            // calc size constraints for children
-            int pwidth = parentWidth;
+            child(0).measureMinHeight(w);
+            adjustMeasuredMinHeight(child(0).measuredMinHeight);
+        }
+        else {
+            adjustMeasuredMinHeight(0);
+        }
+    }
+
+    override void measureHeight(int parentHeight) {
+        if (childCount > 0) {
+            Rect m = margins;
+            Rect p = padding;
             int pheight = parentHeight;
-            if (parentWidth != SIZE_UNSPECIFIED)
-                pwidth -= m.left + m.right + p.left + p.right;
-            if (parentHeight != SIZE_UNSPECIFIED)
-                pheight -= m.top + m.bottom + p.top + p.bottom;
+            pheight -= m.top + m.bottom + p.top + p.bottom;
+
             if (cast(DialogFrame) child(0) !is null) {
-                child(0).measureSize(pwidth * 4 / 5, pheight * 4 / 5);
-                adjustMeasuredSize(pwidth * 4 / 5, pheight * 4 / 5, child(0).measuredWidth, child(0).measuredHeight);
+                child(0).measureHeight(pheight * 4 / 5);
+                adjustMeasuredHeight(pheight * 4 / 5, child(0).measuredHeight);
             }
             else {
-                child(0).measureSize(pwidth, pheight);
-                adjustMeasuredSize(parentWidth, parentHeight, child(0).measuredWidth, child(0).measuredHeight);
+                child(0).measureHeight(pheight);
+                adjustMeasuredHeight(parentHeight, child(0).measuredHeight);
             }
         }
         else
-            adjustMeasuredSize(parentWidth, parentHeight, 0, 0);
+            adjustMeasuredHeight(parentHeight, 0);
     }
+    
     /// close and destroy popup
     void close() {
         window.removePopup(this);

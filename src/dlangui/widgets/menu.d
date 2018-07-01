@@ -324,50 +324,46 @@ class MenuItemWidget : WidgetGroupDefaultDrawing {
     void measureSubitems(ref int maxLabelWidth, ref int maxHeight, ref int maxIconWidth, ref int maxAccelWidth) {
         if (_item.type == MenuItemType.Separator)
             return;
-        _label.measureMinSize();
-        if (maxLabelWidth < _label.measuredMinWidth)
-            maxLabelWidth = _label.measuredMinWidth;
-        if (maxHeight < _label.measuredMinHeight)
-            maxHeight = _label.measuredMinHeight;
+        _label.measureMinWidth();
+        _label.measureWidth(_label.measuredMinWidth);
+        _label.measureMinHeight(_label.measuredWidth);
+        _label.measureHeight(_label.measuredMinHeight);
+        if (maxLabelWidth < _label.measuredWidth)
+            maxLabelWidth = _label.measuredWidth;
+        if (maxHeight < _label.measuredHeight)
+            maxHeight = _label.measuredHeight;
         if (_icon) {
-            _icon.measureMinSize();
-            if (maxIconWidth < _icon.measuredMinWidth)
-                maxIconWidth = _icon.measuredMinWidth;
-            if (maxHeight < _icon.measuredMinHeight)
-                maxHeight = _icon.measuredMinHeight;
+            _icon.measureMinWidth();
+            _icon.measureWidth(_icon.measuredMinWidth);
+            _icon.measureMinHeight(_icon.measuredWidth);
+            _icon.measureHeight(_icon.measuredMinHeight);
+            if (maxIconWidth < _icon.measuredWidth)
+                maxIconWidth = _icon.measuredWidth;
+            if (maxHeight < _icon.measuredHeight)
+                maxHeight = _icon.measuredHeight;
         }
         if (_accel) {
-            _accel.measureMinSize();
-            if (maxAccelWidth < _accel.measuredMinWidth)
-                maxAccelWidth = _accel.measuredMinWidth;
-            if (maxHeight < _accel.measuredMinHeight)
-                maxHeight = _accel.measuredMinHeight;
-        }
-    }
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
-        updateState();
-        Rect m = margins;
-        Rect p = padding;
-        if (_item.type == MenuItemType.Separator) {
-            adjustMeasuredSize(parentWidth, parentHeight, 1, 1); // for vertical (popup menu)
-            return;
-        }
-        // calc size constraints for children
-        int pwidth = parentWidth;
-        int pheight = parentHeight;
-        if (parentWidth != SIZE_UNSPECIFIED)
-            pwidth -= m.left + m.right + p.left + p.right;
-        if (parentHeight != SIZE_UNSPECIFIED)
-            pheight -= m.top + m.bottom + p.top + p.bottom;
-        if (_labelWidth)
-            adjustMeasuredSize(parentWidth, parentHeight, _iconWidth + _labelWidth + _accelWidth, _height); // for vertical (popup menu)
-        else {
-            _label.measureSize(pwidth, pheight);
-            adjustMeasuredSize(parentWidth, parentHeight, _label.measuredWidth, _label.measuredHeight); // for horizonral (main) menu
+            _accel.measureMinWidth();
+            _accel.measureWidth(_accel.measuredMinWidth);
+            _accel.measureMinHeight(_accel.measuredWidth);
+            _accel.measureHeight(_accel.measuredMinHeight);
+            if (maxAccelWidth < _accel.measuredWidth)
+                maxAccelWidth = _accel.measuredWidth;
+            if (maxHeight < _accel.measuredHeight)
+                maxHeight = _accel.measuredHeight;
         }
     }
 
+    override void measureMinWidth() {
+        updateState();
+        measureSubitems(_labelWidth, _height, _iconWidth, _accelWidth);
+        adjustMeasuredMinWidth(_labelWidth + _iconWidth + _accelWidth);
+    }
+
+    override void measureMinHeight(int widgetWidth) {
+        adjustMeasuredMinHeight(_height);
+    }
+    
     /// Set widget rectangle to specified value and layout widget contents. (Step 2 of two phase layout).
     override void layout(Rect rc) {
         _needLayout = false;
@@ -539,37 +535,6 @@ class MenuWidgetBase : ListWidget {
             if (w)
                 w.updateActionState(force);
         }
-    }
-
-    /// Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
-    override void measureSize(int parentWidth, int parentHeight) {
-        if (_orientation == Orientation.Horizontal) {
-            // for horizontal (main) menu, don't align items
-            super.measureSize(parentWidth, parentHeight);
-            return;
-        }
-
-        if (visibility == Visibility.Gone) {
-            _measuredWidth = _measuredHeight = 0;
-            return;
-        }
-        int maxLabelWidth;
-        int maxHeight;
-        int maxIconWidth;
-        int maxAccelWidth;
-        /// find max dimensions for item icon and accelerator sizes
-        for (int i = 0; i < itemCount; i++) {
-            MenuItemWidget w = cast(MenuItemWidget)itemWidget(i);
-            if (w)
-                w.measureSubitems(maxLabelWidth, maxHeight, maxIconWidth, maxAccelWidth);
-        }
-        /// set equal dimensions for item icon and accelerator sizes
-        for (int i = 0; i < itemCount; i++) {
-            MenuItemWidget w = cast(MenuItemWidget)itemWidget(i);
-            if (w)
-                w.setSubitemSizes(maxLabelWidth, maxHeight, maxIconWidth, maxAccelWidth);
-        }
-        super.measureSize(parentWidth, parentHeight);
     }
 
     protected void performUndoSelection() {
