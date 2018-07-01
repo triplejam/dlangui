@@ -162,10 +162,8 @@ class GroupBox : LinearLayout {
         Rect m = margins;
         Rect p = padding;
         int w = _caption.measuredWidth + extraTop + m.top + m.bottom + p.top + p.bottom;
-        Log.d(_caption.text, " ", contentWidth);
         if (contentWidth < w)
             contentWidth = w;
-        Log.d(_caption.text, " ", contentWidth);
         super.adjustMeasuredWidth(parentWidth, contentWidth);
     }
     
