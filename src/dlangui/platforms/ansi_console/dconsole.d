@@ -401,6 +401,8 @@ class Console {
             //turn off canonical mode
             ttystate.c_lflag &= ~ICANON;
             ttystate.c_lflag &= ~ECHO;
+            //disable flow control
+            ttystate.c_iflag &= ~IXON;
             //minimum of number input read.
             ttystate.c_cc[VMIN] = 1;
             //set the terminal attributes.
